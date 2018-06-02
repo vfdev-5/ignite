@@ -10,7 +10,6 @@ Ignite
 
 Ignite is a high-level library to help with training neural networks in PyTorch.
 
-*Note: Ignite is currently in alpha, and the API is subject to change. A first release coming soon, where we will stabilize the API. Stay tuned.*
 
 Installation
 ============
@@ -21,7 +20,19 @@ From source:
 
     python setup.py install
 
-*Anaconda & pip coming soon*
+
+From pip:
+
+.. code:: bash
+
+    pip install pytorch-ignite
+
+From conda:
+
+.. code:: bash
+
+    conda ...
+
 
 Documentation
 =============
