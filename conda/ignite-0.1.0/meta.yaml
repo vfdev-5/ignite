@@ -1,0 +1,31 @@
+package:
+  name: ignite
+  version: "{{ environ.get('PYTORCH_IGNITE_BUILD_VERSION') }}"
+
+source:
+   path: ../ignite-src
+
+requirements:
+  build:
+    - python
+    - numpy
+    - setuptools
+    - pytorch >=0.4
+
+  run:
+    - python
+    - numpy
+    - pytorch >=0.4
+
+build:
+  number: {{ environ.get('PYTORCH_IGNITE_BUILD_NUMBER') }}
+  script: python setup.py install
+
+test:
+   imports:
+      - ignite
+
+about:
+  home: https://github.com/pytorch/ignite
+  license: BSD
+  license_file: LICENSE
