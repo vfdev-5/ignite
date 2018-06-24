@@ -38,6 +38,8 @@ class Engine(object):
         process_function (Callable): A function receiving a handle to the engine and the current batch
             in each iteration, and returns data to be stored in the engine's state
 
+    **TEST AUTOGEN** 
+
     Example usage:
 
     .. code-block:: python
