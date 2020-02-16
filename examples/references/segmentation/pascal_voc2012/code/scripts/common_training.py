@@ -177,4 +177,4 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
         checkpoint = torch.load(checkpoint_fp.as_posix())
         Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
-    trainer.run(train_loader, max_epochs=config.num_epochs)
+    trainer.run(train_loader, max_epochs=config.num_epochs, epoch_length=getattr(config, "epoch_length", None))
