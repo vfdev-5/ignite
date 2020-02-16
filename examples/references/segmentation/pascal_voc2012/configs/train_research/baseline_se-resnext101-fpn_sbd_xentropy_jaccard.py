@@ -1,6 +1,7 @@
 # Basic training configuration
 import os
 from functools import partial
+from itertools import chain
 
 import cv2
 import torch.nn as nn
@@ -8,13 +9,18 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lrs
 import torch.distributed as dist
 
-from torchvision.models.segmentation import deeplabv3_resnet101
+from segmentation_models_pytorch import FPN
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2 as ToTensor
 
 from dataflow.dataloaders import get_train_val_loaders
 from dataflow.transforms import ignore_mask_boundaries, prepare_batch_fp32, denormalize
+
+from models import SameSizeOutputModelWrapper
+
+from losses import SumOfLosses
+from losses.jaccard import SoftmaxJaccardWithLogitsLoss
 
 assert 'DATASET_PATH' in os.environ
 data_path = os.environ['DATASET_PATH']
@@ -27,18 +33,18 @@ debug = False
 seed = 12
 
 device = 'cuda'
-
 fp16_opt_level = "O2"
 
 num_classes = 21
 
 
-batch_size = 4  # ~9GB GPU RAM
+batch_size = 20 // dist.get_world_size()
 val_batch_size = 24
 non_blocking = True
 num_workers = 12 // dist.get_world_size()
 val_interval = 1
-accumulation_steps = 4
+start_by_validation = True
+accumulation_steps = 2
 
 val_img_size = 513
 train_img_size = 480
@@ -91,12 +97,8 @@ img_denormalize = partial(denormalize, mean=(0.485, 0.456, 0.406), std=(0.229, 0
 # Setup models
 # ##############################
 
-num_classes = 21
-model = deeplabv3_resnet101(num_classes=num_classes)
-
-
-def model_output_transform(output):
-    return output['out']
+model = FPN(encoder_name='se_resnext101_32x4d', classes=num_classes)
+model = SameSizeOutputModelWrapper(model)
 
 
 # ##############################
@@ -105,9 +107,16 @@ def model_output_transform(output):
 
 num_epochs = 100
 
-criterion = nn.CrossEntropyLoss()
-pred2pred_criterion = nn.L1Loss()
-pred2pred_alpha = 0.1
+xentropy = nn.CrossEntropyLoss()
+jaccard = SoftmaxJaccardWithLogitsLoss()
+
+names = ['cross entropy loss', 'jaccard loss']
+
+criterion = SumOfLosses(losses=[xentropy, jaccard], coeffs=[1.0, 2.0],
+                        names=names,
+                        total_loss_name="supervised batch loss")
+
+output_names = ["supervised batch loss", ] + names
 
 
 lr = 0.007
@@ -115,8 +124,8 @@ weight_decay = 5e-4
 momentum = 0.9
 nesterov = False
 
-optimizer = optim.SGD([{'params': model.backbone.parameters()},
-                       {'params': model.classifier.parameters()}],
+optimizer = optim.SGD([{'params': model.model.encoder.parameters()},
+                       {'params': chain(model.model.decoder.parameters(), model.model.segmentation_head.parameters())}],
                       lr=1.0, momentum=momentum, weight_decay=weight_decay, nesterov=nesterov)
 
 

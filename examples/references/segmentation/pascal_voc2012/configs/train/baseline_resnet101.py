@@ -75,10 +75,8 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(root_path=da
                                                                     num_workers=num_workers,
                                                                     val_batch_size=val_batch_size,
                                                                     train_sampler='distributed',
-                                                                    val_sampler='distributed',
                                                                     limit_train_num_samples=100 if debug else None,
-                                                                    limit_val_num_samples=100 if debug else None,
-                                                                    random_seed=seed)
+                                                                    limit_val_num_samples=100 if debug else None)
 
 prepare_batch = prepare_batch_fp32
 

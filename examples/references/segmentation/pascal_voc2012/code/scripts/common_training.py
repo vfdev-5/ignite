@@ -54,7 +54,7 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
     # Setup trainer
     accumulation_steps = getattr(config, "accumulation_steps", 1)
-    model_output_transform = getattr(config, "model_output_transform", lambda x, _: x)
+    model_output_transform = getattr(config, "model_output_transform", lambda x: x)
 
     def train_update_function(engine, batch):
 
@@ -62,7 +62,7 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
         x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
         y_pred = model(x)
-        y_pred = model_output_transform(y_pred, x)
+        y_pred = model_output_transform(y_pred)
         loss = criterion(y_pred, y)
 
         if isinstance(loss, Mapping):
@@ -114,7 +114,7 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
     evaluator_args = dict(
         model=model, metrics=val_metrics, device=device, non_blocking=non_blocking, prepare_batch=prepare_batch,
-        output_transform=lambda x, y, y_pred: (model_output_transform(y_pred, x), y,)
+        output_transform=lambda x, y, y_pred: (model_output_transform(y_pred), y,)
     )
     train_evaluator = create_supervised_evaluator(**evaluator_args)
     evaluator = create_supervised_evaluator(**evaluator_args)

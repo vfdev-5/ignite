@@ -69,15 +69,14 @@ class SBDatasetOpencv(SBDataset):
 
         mask = self._get_target(self.masks[index])
 
+        dp = {"image": img, "mask": mask}
         if self.return_meta:
-            return {"image": img, "mask": mask,
-                    "meta": {"index": index,
-                             "image_path": self.images[index],
-                             "mask_path": self.masks[index]
-                             }
-                    }
-
-        return {"image": img, "mask": mask}
+            dp["meta"] = {
+                "index": index,
+                "image_path": self.images[index],
+                "mask_path": self.masks[index]
+            }
+        return dp
 
 
 def get_train_dataset(root_path: str, return_meta: bool = False):

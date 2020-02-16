@@ -13,9 +13,11 @@ from torchvision.models.segmentation import deeplabv3_resnet101
 import albumentations as A
 from albumentations.pytorch import ToTensorV2 as ToTensor
 
-from dataflow.dataloaders import get_train_val_loaders
+from ignite.contrib.research import MemoizingDataset, ExampleEchoingSampler, DistributedProxySampler
+
+from dataflow.datasets import get_train_dataset, get_val_dataset, get_train_noval_sbdataset
+from dataflow.dataloaders import get_dataloader, get_train_val_loaders
 from dataflow.transforms import ignore_mask_boundaries, prepare_batch_fp32, denormalize
-from dataflow.data_echoing import DataEchoingSampler, MemoizingDataset
 
 from losses import SumOfLosses
 from losses.jaccard import SoftmaxJaccardWithLogitsLoss
@@ -37,7 +39,7 @@ fp16_opt_level = "O2"
 num_classes = 21
 
 
-batch_size = 8  # ~9GB GPU RAM
+batch_size = 16 // dist.get_world_size()
 val_batch_size = 24
 non_blocking = True
 num_workers = 12 // dist.get_world_size()
@@ -45,7 +47,7 @@ val_interval = 1
 accumulation_steps = 4
 
 # Example echoing: https://arxiv.org/abs/1907.05550
-num_echoes = 2
+num_echoes = 4
 
 val_img_size = 513
 train_img_size = 480
@@ -78,18 +80,25 @@ val_transforms = A.Compose([
 ])
 
 
-train_loader, val_loader, train_eval_loader = get_train_val_loaders(root_path=data_path,
-                                                                    train_transforms=train_transforms,
-                                                                    val_transforms=val_transforms,
-                                                                    batch_size=batch_size,
-                                                                    num_workers=num_workers,
-                                                                    val_batch_size=val_batch_size,
-                                                                    with_sbd=sbd_data_path,
-                                                                    train_sampler='distributed',
-                                                                    val_sampler='distributed',
-                                                                    limit_train_num_samples=100 if debug else None,
-                                                                    limit_val_num_samples=100 if debug else None,
-                                                                    random_seed=seed)
+train_ds = get_train_dataset(data_path) + get_train_noval_sbdataset(sbd_data_path)
+train_ds = MemoizingDataset(train_ds)
+val_ds = get_val_dataset(data_path)
+
+train_sampler = ExampleEchoingSampler(num_echoes=num_echoes, dataset_length=len(train_ds))
+train_sampler = DistributedProxySampler(train_sampler)
+train_loader = get_dataloader(train_ds, transforms=train_transforms,
+                              limit_num_samples=100 if debug else None,
+                              batch_size=batch_size, num_workers=num_workers,
+                              sampler=train_sampler, pin_memory=True)
+
+_, val_loader, train_eval_loader = get_train_val_loaders(root_path=data_path,
+                                                         train_transforms=train_transforms,
+                                                         val_transforms=val_transforms,
+                                                         batch_size=batch_size,
+                                                         num_workers=num_workers,
+                                                         val_batch_size=val_batch_size,
+                                                         train_sampler='distributed',
+                                                         limit_val_num_samples=100 if debug else None)
 
 prepare_batch = prepare_batch_fp32
 
