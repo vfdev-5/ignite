@@ -1,6 +1,5 @@
 # This a training script launched with py_config_runner
 # It should obligatory contain `run(config, **kwargs)` method
-
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -10,19 +9,23 @@ import torch.distributed as dist
 from apex import amp
 from apex.parallel import DistributedDataParallel as DDP
 
+
+import ignite
 from ignite.engine import Engine, Events, _prepare_batch, create_supervised_evaluator
-from ignite.handlers import Checkpoint
 from ignite.metrics import ConfusionMatrix, IoU, mIoU
 
 from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.engines import common
 
+from polyaxon_client.tracking import get_outputs_path, Experiment
+
+from py_config_runner.config_utils import get_params, TRAINVAL_CONFIG, assert_config
 from py_config_runner.utils import set_seed
 
 from utils.handlers import predictions_gt_images_handler
 
 
-def training(config, local_rank=None, with_mlflow_logging=False, with_plx_logging=False):
+def training(config, local_rank=None):
 
     if not getattr(config, "use_fp16", True):
         raise RuntimeError("This training script uses by default fp16 AMP")
@@ -48,30 +51,48 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
     model, optimizer = amp.initialize(model, optimizer, opt_level=getattr(config, "fp16_opt_level", "O2"), num_losses=1)
     model = DDP(model, delay_allreduce=True)
     criterion = config.criterion.to(device)
+    pred2pred_criterion = config.pred2pred_criterion.to(device)
+    pred2pred_alpha = config.pred2pred_alpha
 
     prepare_batch = getattr(config, "prepare_batch", _prepare_batch)
     non_blocking = getattr(config, "non_blocking", True)
 
     # Setup trainer
     accumulation_steps = getattr(config, "accumulation_steps", 1)
-    model_output_transform = getattr(config, "model_output_transform", lambda x, _: x)
+    model_output_transform = getattr(config, "model_output_transform", lambda x: x)
+
+    def compute_supervised_loss(batch):
+        x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
+        y_pred = model(x)
+        y_pred = model_output_transform(y_pred)
+        return criterion(y_pred, y), y_pred
+
+    def compute_self_preds_consistency_loss(y_pred):
+        model.eval()
+        x = torch.argmax(y_pred, dim=1) / config.num_classes - 0.5
+        x = torch.stack([x, x, x], dim=1)
+        y_pred2pred = model(x)
+        y_pred2pred = model_output_transform(y_pred2pred)
+        return pred2pred_criterion(y_pred2pred, y_pred.detach())
 
     def train_update_function(engine, batch):
 
         model.train()
 
-        x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
-        y_pred = model(x)
-        y_pred = model_output_transform(y_pred, x)
-        loss = criterion(y_pred, y)
+        supervised_loss, y_pred = compute_supervised_loss(batch)
 
-        if isinstance(loss, Mapping):
-            assert 'supervised batch loss' in loss
-            loss_dict = loss
+        if isinstance(supervised_loss, Mapping):
+            assert 'supervised batch loss' in supervised_loss
+            loss_dict = supervised_loss
             output = {k: v.item() for k, v in loss_dict.items()}
-            loss = loss_dict['supervised batch loss'] / accumulation_steps
+            supervised_loss = loss_dict['supervised batch loss'] / accumulation_steps
         else:
-            output = {'supervised batch loss': loss.item()}
+            output = {'supervised batch loss': supervised_loss.item()}
+
+        pred2pred_loss = compute_self_preds_consistency_loss(y_pred)
+        output['pred2pred batch loss'] = pred2pred_loss.item()
+
+        loss = supervised_loss + pred2pred_alpha * pred2pred_loss
 
         with amp.scale_loss(loss, optimizer, loss_id=0) as scaled_loss:
             scaled_loss.backward()
@@ -82,19 +103,16 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
         return output
 
-    output_names = getattr(config, "output_names", ['supervised batch loss', ])
+    output_names = getattr(config, "output_names", ['supervised batch loss', 'pred2pred batch loss'])
 
     trainer = Engine(train_update_function)
-    lr_scheduler = config.lr_scheduler
-    to_save = {'model': model, 'optimizer': optimizer, 'lr_scheduler': lr_scheduler,
-               'trainer': trainer, 'amp': amp}
     common.setup_common_distrib_training_handlers(
         trainer, train_sampler,
-        to_save=to_save,
+        to_save={'model': model, 'optimizer': optimizer},
         save_every_iters=1000, output_path=config.output_path.as_posix(),
-        lr_scheduler=lr_scheduler, with_gpu_stats=True,
+        lr_scheduler=config.lr_scheduler, with_gpu_stats=True,
         output_names=output_names,
-        with_pbars=True, with_pbar_on_iters=with_mlflow_logging,
+        with_pbars=True, with_pbar_on_iters=False,
         log_every_iters=1
     )
 
@@ -114,14 +132,10 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
     evaluator_args = dict(
         model=model, metrics=val_metrics, device=device, non_blocking=non_blocking, prepare_batch=prepare_batch,
-        output_transform=lambda x, y, y_pred: (model_output_transform(y_pred, x), y,)
+        output_transform=lambda x, y, y_pred: (model_output_transform(y_pred), y,)
     )
     train_evaluator = create_supervised_evaluator(**evaluator_args)
     evaluator = create_supervised_evaluator(**evaluator_args)
-
-    if dist.get_rank() == 0 and with_mlflow_logging:
-        ProgressBar(persist=False, desc="Train Evaluation").attach(train_evaluator)
-        ProgressBar(persist=False, desc="Val Evaluation").attach(evaluator)
 
     def run_validation(_):
         train_evaluator.run(train_eval_loader)
@@ -141,13 +155,9 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
         tb_logger = common.setup_tb_logging(config.output_path.as_posix(), trainer, optimizer,
                                             evaluators={"training": train_evaluator, "validation": evaluator})
-        if with_mlflow_logging:
-            common.setup_mlflow_logging(trainer, optimizer,
-                                        evaluators={"training": train_evaluator, "validation": evaluator})
 
-        if with_plx_logging:
-            common.setup_plx_logging(trainer, optimizer,
-                                     evaluators={"training": train_evaluator, "validation": evaluator})
+        common.setup_plx_logging(trainer, optimizer,
+                                 evaluators={"training": train_evaluator, "validation": evaluator})
 
         common.save_best_model_by_val_score(config.output_path.as_posix(), evaluator, model,
                                             metric_name=score_metric_name, trainer=trainer)
@@ -169,12 +179,44 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
                                                                        prefix_tag="validation"),
                              event_name=Events.EPOCH_COMPLETED)
 
-    resume_from = getattr(config, "resume_from", None)
-    if resume_from is not None:
-        checkpoint_fp = Path(resume_from)
-        assert checkpoint_fp.exists(), "Checkpoint '{}' is not found".format(checkpoint_fp.as_posix())
-        print("Resume from a checkpoint: {}".format(checkpoint_fp.as_posix()))
-        checkpoint = torch.load(checkpoint_fp.as_posix())
-        Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
-
     trainer.run(train_loader, max_epochs=config.num_epochs)
+
+
+def run(config, logger=None, local_rank=0, **kwargs):
+
+    assert torch.cuda.is_available(), torch.cuda.is_available()
+    assert torch.backends.cudnn.enabled, "Nvidia/Amp requires cudnn backend to be enabled."
+
+    dist.init_process_group("nccl", init_method="env://")
+
+    # As we passed config with option --manual_config_load
+    assert hasattr(config, "setup"), "We need to manually setup the configuration, please set --manual_config_load " \
+                                     "to py_config_runner"
+
+    config = config.setup()
+
+    assert_config(config, TRAINVAL_CONFIG)
+    # The following attributes are automatically added by py_config_runner
+    assert hasattr(config, "config_filepath") and isinstance(config.config_filepath, Path)
+    assert hasattr(config, "script_filepath") and isinstance(config.script_filepath, Path)
+
+    config.output_path = Path(get_outputs_path())
+
+    if dist.get_rank() == 0:
+        plx_exp = Experiment()
+        plx_exp.log_params({
+            "pytorch version": torch.__version__,
+            "ignite version": ignite.__version__,
+        })
+        plx_exp.log_params(**get_params(config, TRAINVAL_CONFIG))
+
+    try:
+        training(config, local_rank=local_rank)
+    except KeyboardInterrupt:
+        logger.info("Catched KeyboardInterrupt -> exit")
+    except Exception as e:  # noqa
+        logger.exception("")
+        dist.destroy_process_group()
+        raise e
+
+    dist.destroy_process_group()
