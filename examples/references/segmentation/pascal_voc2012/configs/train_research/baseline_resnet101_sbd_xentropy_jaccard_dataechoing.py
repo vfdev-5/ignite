@@ -13,7 +13,8 @@ from torchvision.models.segmentation import deeplabv3_resnet101
 import albumentations as A
 from albumentations.pytorch import ToTensorV2 as ToTensor
 
-from ignite.contrib.research import MemoizingDataset, ExampleEchoingSampler, DistributedProxySampler
+from ignite.contrib.research import MemoizingDataset, ExampleEchoingSampler
+from ignite.contrib.research.data_echoing import DistributedProxySampler
 
 from dataflow.datasets import get_train_dataset, get_val_dataset, get_train_noval_sbdataset
 from dataflow.dataloaders import get_dataloader, get_train_val_loaders
@@ -39,7 +40,7 @@ fp16_opt_level = "O2"
 num_classes = 21
 
 
-batch_size = 16 // dist.get_world_size()
+batch_size = 8 // dist.get_world_size()
 val_batch_size = 24
 non_blocking = True
 num_workers = 12 // dist.get_world_size()
