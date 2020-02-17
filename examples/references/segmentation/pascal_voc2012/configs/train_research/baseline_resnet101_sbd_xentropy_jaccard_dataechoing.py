@@ -13,8 +13,8 @@ from torchvision.models.segmentation import deeplabv3_resnet101
 import albumentations as A
 from albumentations.pytorch import ToTensorV2 as ToTensor
 
-from ignite.contrib.research import MemoizingDataset, ExampleEchoingSampler
-from ignite.contrib.research.data_echoing import DistributedProxySampler
+from ignite.contrib.experimental import MemoizingDataset, ExampleEchoingSampler
+from ignite.contrib.experimental.data_echoing import DistributedProxySampler
 
 from dataflow.datasets import get_train_dataset, get_val_dataset, get_train_noval_sbdataset
 from dataflow.dataloaders import get_dataloader, get_train_val_loaders

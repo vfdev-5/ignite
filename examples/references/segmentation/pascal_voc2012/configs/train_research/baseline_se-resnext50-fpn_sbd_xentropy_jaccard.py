@@ -47,7 +47,7 @@ start_by_validation = True
 accumulation_steps = 2
 
 val_img_size = 513
-train_img_size = 480
+train_img_size = 513
 
 # ##############################
 # Setup Dataflow
