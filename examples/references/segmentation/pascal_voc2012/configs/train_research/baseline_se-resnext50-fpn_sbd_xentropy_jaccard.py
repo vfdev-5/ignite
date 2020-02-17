@@ -38,7 +38,7 @@ fp16_opt_level = "O2"
 num_classes = 21
 
 
-batch_size = 20 // dist.get_world_size()
+batch_size = 24 // dist.get_world_size()
 val_batch_size = 24
 non_blocking = True
 num_workers = 12 // dist.get_world_size()
@@ -58,9 +58,19 @@ std = (0.229, 0.224, 0.225)
 
 
 train_transforms = A.Compose([
-    A.RandomResizedCrop(train_img_size, train_img_size),
+    A.RandomScale(scale_limit=(0.0, 1.5), interpolation=cv2.INTER_LINEAR, p=1.0),
+    A.PadIfNeeded(val_img_size, val_img_size, border_mode=cv2.BORDER_CONSTANT),
+    A.RandomCrop(train_img_size, train_img_size),
+
     A.HorizontalFlip(),
     A.Blur(blur_limit=3),
+
+    A.CoarseDropout(max_height=64, max_width=64),
+
+    A.OneOf([
+        A.RandomBrightnessContrast(),
+        A.HueSaturationValue(),
+    ]),
 
     A.Normalize(mean=mean, std=std),
     ignore_mask_boundaries,

@@ -40,15 +40,14 @@ class VOCSegmentationOpencv(VOCSegmentation):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mask = np.asarray(Image.open(self.masks[index]))
 
+        dp = {"image": img, "mask": mask}
         if self.return_meta:
-            return {"image": img, "mask": mask,
-                    "meta": {"index": index,
-                             "image_path": self.images[index],
-                             "mask_path": self.masks[index]
-                             }
-                    }
-
-        return {"image": img, "mask": mask}
+            dp["meta"] = {
+                "index": index,
+                "image_path": self.images[index],
+                "mask_path": self.masks[index]
+            }
+        return dp
 
 
 class SBDatasetOpencv(SBDataset):
