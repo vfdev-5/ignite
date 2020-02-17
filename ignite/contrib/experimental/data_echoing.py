@@ -91,6 +91,7 @@ class MemoizingDataset(Dataset):
     """Helper dataset wrapper to cache the output of `__getitem__` method.
     Input dataset should not be `torch.utils.data.IterableDataset`.
     """
+    lru_cache_maxsize = 128
 
     def __init__(self, dataset: torch.utils.data.Dataset):
         if hasattr(dataset, "__iter__") and not hasattr(dataset, "__getitem__"):
@@ -100,7 +101,7 @@ class MemoizingDataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
-    @lru_cache()
+    @lru_cache(maxsize=lru_cache_maxsize)
     def __getitem__(self, index: int):
         return self.dataset[index]
 

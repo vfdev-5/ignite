@@ -1,3 +1,4 @@
+import time
 import torch
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 
@@ -6,11 +7,14 @@ from ignite.contrib.experimental import ExampleEchoingSampler, MemoizingDataset
 
 class DummyDataset(Dataset):
 
-    def __init__(self, size, with_index=False):
+    def __init__(self, size, data_read_delay=None):
         self.data = torch.rand(size, 3, 12, 12)
         self.targets = torch.randint(0, 10, size=(size, ))
+        self.data_read_delay = data_read_delay
 
     def __getitem__(self, i):
+        if self.data_read_delay is not None:
+            time.sleep(self.data_read_delay)
         return self.data[i], self.targets[i]
 
     def __len__(self):
@@ -66,3 +70,28 @@ def test_example_echoing_sampler_with_base_sampler():
         for xy_hash in seen_batch:
             count = batch_xy_hash.count(xy_hash)
             assert count >= num_echoes, "{} : {}".format(xy_hash, batch_xy_hash)
+
+
+def test_memoizing_dataset():
+    size = 100
+    num_echoes = 3
+    data_read_delay = 0.005
+    num_epochs = 1
+
+    def _measure_time(with_memoizing):
+        dataset = DummyDataset(size=size, data_read_delay=data_read_delay)
+        if with_memoizing:
+            dataset = MemoizingDataset(dataset)
+
+        started = time.time()
+        sums = 0.0
+        for e in range(num_epochs):
+            for i in range(len(dataset)):
+                for _ in range(num_echoes):
+                    dp = dataset[i]
+                    sums += dp[0].sum()
+        return time.time() - started
+
+    mean_elapsed_time1 = _measure_time(with_memoizing=False)
+    mean_elapsed_time2 = _measure_time(with_memoizing=True)
+    assert mean_elapsed_time2 < (mean_elapsed_time1 / num_echoes) + 0.01 * mean_elapsed_time1
