@@ -1,1 +1,0 @@
-from ignite.contrib.research.data_echoing import ExampleEchoingSampler, MemoizingDataset
