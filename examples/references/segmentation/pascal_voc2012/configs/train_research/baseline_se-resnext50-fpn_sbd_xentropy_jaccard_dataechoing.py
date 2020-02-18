@@ -42,7 +42,7 @@ fp16_opt_level = "O2"
 num_classes = 21
 
 
-batch_size = 14 // dist.get_world_size()
+batch_size = 14
 val_batch_size = 24
 non_blocking = True
 num_workers = 12 // dist.get_world_size()
@@ -51,7 +51,7 @@ start_by_validation = True
 accumulation_steps = 2
 
 # Example echoing: https://arxiv.org/abs/1907.05550
-num_echoes = 2
+num_echoes = 4
 
 val_img_size = 513
 train_img_size = 480
