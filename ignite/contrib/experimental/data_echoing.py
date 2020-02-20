@@ -57,12 +57,12 @@ class ExampleEchoingSampler(Sampler):
 
     """
 
-    def __init__(self,
-                 num_echoes: int = 3,
-                 base_sampler: Optional[Sampler] = None,
-                 dataset_length: Optional[int] = None):
-        if (base_sampler is None and dataset_length is None) or \
-                (base_sampler is not None and dataset_length is not None):
+    def __init__(
+        self, num_echoes: int = 3, base_sampler: Optional[Sampler] = None, dataset_length: Optional[int] = None
+    ):
+        if (base_sampler is None and dataset_length is None) or (
+            base_sampler is not None and dataset_length is not None
+        ):
             raise ValueError("One of the arguments only should be defined: base_sampler or dataset_length")
         super(ExampleEchoingSampler, self).__init__([])
 
@@ -91,6 +91,7 @@ class MemoizingDataset(Dataset):
     """Helper dataset wrapper to cache the output of `__getitem__` method.
     Input dataset should not be `torch.utils.data.IterableDataset`.
     """
+
     lru_cache_maxsize = 128
 
     def __init__(self, dataset: torch.utils.data.Dataset):
@@ -135,12 +136,12 @@ class DistributedProxySampler(data_dist.DistributedSampler):
         indices = list(self.sampler)
 
         # add extra samples to make it evenly divisible
-        indices += indices[:(self.total_size - len(indices))]
+        indices += indices[: (self.total_size - len(indices))]
         if len(indices) != self.total_size:
             raise RuntimeError("{} vs {}".format(len(indices), self.total_size))
 
         # subsample
-        indices = indices[self.rank:self.total_size:self.num_replicas]
+        indices = indices[self.rank : self.total_size : self.num_replicas]
         if len(indices) != self.num_samples:
             raise RuntimeError("{} vs {}".format(len(indices), self.num_samples))
 

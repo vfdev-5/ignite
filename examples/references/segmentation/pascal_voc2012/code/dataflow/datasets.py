@@ -13,7 +13,6 @@ from torchvision.datasets.sbd import SBDataset
 
 
 class TransformedDataset(Dataset):
-
     def __init__(self, ds: Dataset, transform_fn: Callable):
         assert isinstance(ds, Dataset)
         assert callable(transform_fn)
@@ -29,7 +28,6 @@ class TransformedDataset(Dataset):
 
 
 class VOCSegmentationOpencv(VOCSegmentation):
-
     def __init__(self, *args, return_meta: bool = False, **kwargs):
         super(VOCSegmentationOpencv, self).__init__(*args, **kwargs)
         self.return_meta = return_meta
@@ -42,16 +40,11 @@ class VOCSegmentationOpencv(VOCSegmentation):
 
         dp = {"image": img, "mask": mask}
         if self.return_meta:
-            dp["meta"] = {
-                "index": index,
-                "image_path": self.images[index],
-                "mask_path": self.masks[index]
-            }
+            dp["meta"] = {"index": index, "image_path": self.images[index], "mask_path": self.masks[index]}
         return dp
 
 
 class SBDatasetOpencv(SBDataset):
-
     def __init__(self, *args, return_meta: bool = False, **kwargs):
         super(SBDatasetOpencv, self).__init__(*args, **kwargs)
         assert self.mode == "segmentation", "SBDatasetOpencv should be in segmentation mode only"
@@ -59,7 +52,7 @@ class SBDatasetOpencv(SBDataset):
 
     def _get_segmentation_target(self, filepath):
         mat = self._loadmat(filepath)
-        return mat['GTcls'][0]['Segmentation'][0]
+        return mat["GTcls"][0]["Segmentation"][0]
 
     def __getitem__(self, index):
         img = cv2.imread(self.images[index])
@@ -70,23 +63,19 @@ class SBDatasetOpencv(SBDataset):
 
         dp = {"image": img, "mask": mask}
         if self.return_meta:
-            dp["meta"] = {
-                "index": index,
-                "image_path": self.images[index],
-                "mask_path": self.masks[index]
-            }
+            dp["meta"] = {"index": index, "image_path": self.images[index], "mask_path": self.masks[index]}
         return dp
 
 
 def get_train_dataset(root_path: str, return_meta: bool = False):
-    return VOCSegmentationOpencv(root=root_path, year='2012', image_set='train', download=False,
-                                 return_meta=return_meta)
+    return VOCSegmentationOpencv(
+        root=root_path, year="2012", image_set="train", download=False, return_meta=return_meta
+    )
 
 
 def get_val_dataset(root_path: str, return_meta: bool = False):
-    return VOCSegmentationOpencv(root=root_path, year='2012', image_set='val', download=False,
-                                 return_meta=return_meta)
+    return VOCSegmentationOpencv(root=root_path, year="2012", image_set="val", download=False, return_meta=return_meta)
 
 
 def get_train_noval_sbdataset(root_path: str, return_meta: bool = False):
-    return SBDatasetOpencv(root_path, image_set='train_noval', mode='segmentation', return_meta=return_meta)
+    return SBDatasetOpencv(root_path, image_set="train_noval", mode="segmentation", return_meta=return_meta)

@@ -32,16 +32,18 @@ def training(config, local_rank=None):
 
     set_seed(config.seed + local_rank)
     torch.cuda.set_device(local_rank)
-    device = 'cuda'
+    device = "cuda"
 
     torch.backends.cudnn.benchmark = True
 
     train_loader = config.train_loader
     train_sampler = getattr(train_loader, "sampler", None)
-    assert train_sampler is not None, "Train loader of type '{}' " \
-                                      "should have attribute 'sampler'".format(type(train_loader))
-    assert hasattr(train_sampler, 'set_epoch') and callable(train_sampler.set_epoch), \
-        "Train sampler should have a callable method `set_epoch`"
+    assert train_sampler is not None, "Train loader of type '{}' " "should have attribute 'sampler'".format(
+        type(train_loader)
+    )
+    assert hasattr(train_sampler, "set_epoch") and callable(
+        train_sampler.set_epoch
+    ), "Train sampler should have a callable method `set_epoch`"
 
     train_eval_loader = config.train_eval_loader
     val_loader = config.val_loader
@@ -82,15 +84,15 @@ def training(config, local_rank=None):
         supervised_loss, y_pred = compute_supervised_loss(batch)
 
         if isinstance(supervised_loss, Mapping):
-            assert 'supervised batch loss' in supervised_loss
+            assert "supervised batch loss" in supervised_loss
             loss_dict = supervised_loss
             output = {k: v.item() for k, v in loss_dict.items()}
-            supervised_loss = loss_dict['supervised batch loss'] / accumulation_steps
+            supervised_loss = loss_dict["supervised batch loss"] / accumulation_steps
         else:
-            output = {'supervised batch loss': supervised_loss.item()}
+            output = {"supervised batch loss": supervised_loss.item()}
 
         pred2pred_loss = compute_self_preds_consistency_loss(y_pred)
-        output['pred2pred batch loss'] = pred2pred_loss.item()
+        output["pred2pred batch loss"] = pred2pred_loss.item()
 
         loss = supervised_loss + pred2pred_alpha * pred2pred_loss
 
@@ -103,27 +105,28 @@ def training(config, local_rank=None):
 
         return output
 
-    output_names = getattr(config, "output_names", ['supervised batch loss', 'pred2pred batch loss'])
+    output_names = getattr(config, "output_names", ["supervised batch loss", "pred2pred batch loss"])
 
     trainer = Engine(train_update_function)
     common.setup_common_distrib_training_handlers(
-        trainer, train_sampler,
-        to_save={'model': model, 'optimizer': optimizer},
-        save_every_iters=1000, output_path=config.output_path.as_posix(),
-        lr_scheduler=config.lr_scheduler, with_gpu_stats=True,
+        trainer,
+        train_sampler,
+        to_save={"model": model, "optimizer": optimizer},
+        save_every_iters=1000,
+        output_path=config.output_path.as_posix(),
+        lr_scheduler=config.lr_scheduler,
+        with_gpu_stats=True,
         output_names=output_names,
-        with_pbars=True, with_pbar_on_iters=False,
-        log_every_iters=1
+        with_pbars=True,
+        with_pbar_on_iters=False,
+        log_every_iters=1,
     )
 
     # Setup evaluators
     num_classes = config.num_classes
     cm_metric = ConfusionMatrix(num_classes=num_classes)
 
-    val_metrics = {
-        "IoU": IoU(cm_metric),
-        "mIoU_bg": mIoU(cm_metric),
-    }
+    val_metrics = {"IoU": IoU(cm_metric), "mIoU_bg": mIoU(cm_metric)}
 
     if hasattr(config, "val_metrics") and isinstance(config.val_metrics, dict):
         val_metrics.update(config.val_metrics)
@@ -131,8 +134,12 @@ def training(config, local_rank=None):
     model_output_transform = getattr(config, "model_output_transform", lambda x: x)
 
     evaluator_args = dict(
-        model=model, metrics=val_metrics, device=device, non_blocking=non_blocking, prepare_batch=prepare_batch,
-        output_transform=lambda x, y, y_pred: (model_output_transform(y_pred), y,)
+        model=model,
+        metrics=val_metrics,
+        device=device,
+        non_blocking=non_blocking,
+        prepare_batch=prepare_batch,
+        output_transform=lambda x, y, y_pred: (model_output_transform(y_pred), y),
     )
     train_evaluator = create_supervised_evaluator(**evaluator_args)
     evaluator = create_supervised_evaluator(**evaluator_args)
@@ -153,31 +160,40 @@ def training(config, local_rank=None):
 
     if dist.get_rank() == 0:
 
-        tb_logger = common.setup_tb_logging(config.output_path.as_posix(), trainer, optimizer,
-                                            evaluators={"training": train_evaluator, "validation": evaluator})
+        tb_logger = common.setup_tb_logging(
+            config.output_path.as_posix(),
+            trainer,
+            optimizer,
+            evaluators={"training": train_evaluator, "validation": evaluator},
+        )
 
-        common.setup_plx_logging(trainer, optimizer,
-                                 evaluators={"training": train_evaluator, "validation": evaluator})
+        common.setup_plx_logging(trainer, optimizer, evaluators={"training": train_evaluator, "validation": evaluator})
 
-        common.save_best_model_by_val_score(config.output_path.as_posix(), evaluator, model,
-                                            metric_name=score_metric_name, trainer=trainer)
+        common.save_best_model_by_val_score(
+            config.output_path.as_posix(), evaluator, model, metric_name=score_metric_name, trainer=trainer
+        )
 
         # Log train/val predictions:
-        tb_logger.attach(evaluator,
-                         log_handler=predictions_gt_images_handler(img_denormalize_fn=config.img_denormalize,
-                                                                   n_images=15,
-                                                                   another_engine=trainer,
-                                                                   prefix_tag="validation"),
-                         event_name=Events.EPOCH_COMPLETED)
+        tb_logger.attach(
+            evaluator,
+            log_handler=predictions_gt_images_handler(
+                img_denormalize_fn=config.img_denormalize, n_images=15, another_engine=trainer, prefix_tag="validation"
+            ),
+            event_name=Events.EPOCH_COMPLETED,
+        )
 
         log_train_predictions = getattr(config, "log_train_predictions", False)
         if log_train_predictions:
-            tb_logger.attach(train_evaluator,
-                             log_handler=predictions_gt_images_handler(img_denormalize_fn=config.img_denormalize,
-                                                                       n_images=15,
-                                                                       another_engine=trainer,
-                                                                       prefix_tag="validation"),
-                             event_name=Events.EPOCH_COMPLETED)
+            tb_logger.attach(
+                train_evaluator,
+                log_handler=predictions_gt_images_handler(
+                    img_denormalize_fn=config.img_denormalize,
+                    n_images=15,
+                    another_engine=trainer,
+                    prefix_tag="validation",
+                ),
+                event_name=Events.EPOCH_COMPLETED,
+            )
 
     trainer.run(train_loader, max_epochs=config.num_epochs)
 
@@ -190,8 +206,9 @@ def run(config, logger=None, local_rank=0, **kwargs):
     dist.init_process_group("nccl", init_method="env://")
 
     # As we passed config with option --manual_config_load
-    assert hasattr(config, "setup"), "We need to manually setup the configuration, please set --manual_config_load " \
-                                     "to py_config_runner"
+    assert hasattr(config, "setup"), (
+        "We need to manually setup the configuration, please set --manual_config_load " "to py_config_runner"
+    )
 
     config = config.setup()
 
@@ -204,10 +221,7 @@ def run(config, logger=None, local_rank=0, **kwargs):
 
     if dist.get_rank() == 0:
         plx_exp = Experiment()
-        plx_exp.log_params({
-            "pytorch version": torch.__version__,
-            "ignite version": ignite.__version__,
-        })
+        plx_exp.log_params({"pytorch version": torch.__version__, "ignite version": ignite.__version__})
         plx_exp.log_params(**get_params(config, TRAINVAL_CONFIG))
 
     try:

@@ -6,10 +6,9 @@ from ignite.contrib.experimental import ExampleEchoingSampler, MemoizingDataset
 
 
 class DummyDataset(Dataset):
-
     def __init__(self, size, data_read_delay=None):
         self.data = torch.rand(size, 3, 12, 12)
-        self.targets = torch.randint(0, 10, size=(size, ))
+        self.targets = torch.randint(0, 10, size=(size,))
         self.data_read_delay = data_read_delay
 
     def __getitem__(self, i):

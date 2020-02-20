@@ -19,17 +19,17 @@ from dataflow.transforms import ignore_mask_boundaries, prepare_batch_fp32, deno
 from losses import SumOfLosses
 from losses.jaccard import SoftmaxJaccardWithLogitsLoss
 
-assert 'DATASET_PATH' in os.environ
-data_path = os.environ['DATASET_PATH']
+assert "DATASET_PATH" in os.environ
+data_path = os.environ["DATASET_PATH"]
 
-assert 'SBD_DATASET_PATH' in os.environ
-sbd_data_path = os.environ['SBD_DATASET_PATH']
+assert "SBD_DATASET_PATH" in os.environ
+sbd_data_path = os.environ["SBD_DATASET_PATH"]
 
 
 debug = False
 seed = 12
 
-device = 'cuda'
+device = "cuda"
 
 fp16_opt_level = "O2"
 
@@ -54,44 +54,43 @@ mean = (0.485, 0.456, 0.406)
 std = (0.229, 0.224, 0.225)
 
 
-train_transforms = A.Compose([
-    A.RandomScale(scale_limit=(0.0, 1.5), interpolation=cv2.INTER_LINEAR, p=1.0),
-    A.PadIfNeeded(val_img_size, val_img_size, border_mode=cv2.BORDER_CONSTANT),
-    A.RandomCrop(train_img_size, train_img_size),
+train_transforms = A.Compose(
+    [
+        A.RandomScale(scale_limit=(0.0, 1.5), interpolation=cv2.INTER_LINEAR, p=1.0),
+        A.PadIfNeeded(val_img_size, val_img_size, border_mode=cv2.BORDER_CONSTANT),
+        A.RandomCrop(train_img_size, train_img_size),
+        A.HorizontalFlip(),
+        A.Blur(blur_limit=3),
+        A.CoarseDropout(max_height=64, max_width=64),
+        A.OneOf([A.RandomBrightnessContrast(), A.HueSaturationValue()]),
+        A.Normalize(mean=mean, std=std),
+        ignore_mask_boundaries,
+        ToTensor(),
+    ]
+)
 
-    A.HorizontalFlip(),
-    A.Blur(blur_limit=3),
-
-    A.CoarseDropout(max_height=64, max_width=64),
-
-    A.OneOf([
-        A.RandomBrightnessContrast(),
-        A.HueSaturationValue(),
-    ]),
-
-    A.Normalize(mean=mean, std=std),
-    ignore_mask_boundaries,
-    ToTensor(),
-])
-
-val_transforms = A.Compose([
-    A.PadIfNeeded(val_img_size, val_img_size, border_mode=cv2.BORDER_CONSTANT),
-    A.Normalize(mean=mean, std=std),
-    ignore_mask_boundaries,
-    ToTensor(),
-])
+val_transforms = A.Compose(
+    [
+        A.PadIfNeeded(val_img_size, val_img_size, border_mode=cv2.BORDER_CONSTANT),
+        A.Normalize(mean=mean, std=std),
+        ignore_mask_boundaries,
+        ToTensor(),
+    ]
+)
 
 
-train_loader, val_loader, train_eval_loader = get_train_val_loaders(root_path=data_path,
-                                                                    train_transforms=train_transforms,
-                                                                    val_transforms=val_transforms,
-                                                                    batch_size=batch_size,
-                                                                    num_workers=num_workers,
-                                                                    val_batch_size=val_batch_size,
-                                                                    with_sbd=sbd_data_path,
-                                                                    train_sampler='distributed',
-                                                                    limit_train_num_samples=100 if debug else None,
-                                                                    limit_val_num_samples=100 if debug else None)
+train_loader, val_loader, train_eval_loader = get_train_val_loaders(
+    root_path=data_path,
+    train_transforms=train_transforms,
+    val_transforms=val_transforms,
+    batch_size=batch_size,
+    num_workers=num_workers,
+    val_batch_size=val_batch_size,
+    with_sbd=sbd_data_path,
+    train_sampler="distributed",
+    limit_train_num_samples=100 if debug else None,
+    limit_val_num_samples=100 if debug else None,
+)
 
 prepare_batch = prepare_batch_fp32
 
@@ -107,7 +106,7 @@ model = deeplabv3_resnet101(num_classes=num_classes)
 
 
 def model_output_transform(output):
-    return output['out']
+    return output["out"]
 
 
 # ##############################
@@ -119,13 +118,13 @@ num_epochs = 100
 xentropy = nn.CrossEntropyLoss()
 jaccard = SoftmaxJaccardWithLogitsLoss()
 
-names = ['cross entropy loss', 'jaccard loss']
+names = ["cross entropy loss", "jaccard loss"]
 
-criterion = SumOfLosses(losses=[xentropy, jaccard], coeffs=[1.0, 2.0],
-                        names=names,
-                        total_loss_name="supervised batch loss")
+criterion = SumOfLosses(
+    losses=[xentropy, jaccard], coeffs=[1.0, 2.0], names=names, total_loss_name="supervised batch loss"
+)
 
-output_names = ["supervised batch loss", ] + names
+output_names = ["supervised batch loss"] + names
 
 
 lr = 0.007
@@ -133,9 +132,13 @@ weight_decay = 5e-4
 momentum = 0.9
 nesterov = False
 
-optimizer = optim.SGD([{'params': model.backbone.parameters()},
-                       {'params': model.classifier.parameters()}],
-                      lr=1.0, momentum=momentum, weight_decay=weight_decay, nesterov=nesterov)
+optimizer = optim.SGD(
+    [{"params": model.backbone.parameters()}, {"params": model.classifier.parameters()}],
+    lr=1.0,
+    momentum=momentum,
+    weight_decay=weight_decay,
+    nesterov=nesterov,
+)
 
 
 le = len(train_loader)
@@ -145,8 +148,10 @@ def lambda_lr_scheduler(iteration, lr0, n, a):
     return lr0 * pow((1.0 - 1.0 * iteration / n), a)
 
 
-lr_scheduler = lrs.LambdaLR(optimizer,
-                            lr_lambda=[
-                                partial(lambda_lr_scheduler, lr0=lr, n=num_epochs * le, a=0.9),
-                                partial(lambda_lr_scheduler, lr0=lr * 10.0, n=num_epochs * le, a=0.9)
-                            ])
+lr_scheduler = lrs.LambdaLR(
+    optimizer,
+    lr_lambda=[
+        partial(lambda_lr_scheduler, lr0=lr, n=num_epochs * le, a=0.9),
+        partial(lambda_lr_scheduler, lr0=lr * 10.0, n=num_epochs * le, a=0.9),
+    ],
+)

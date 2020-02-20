@@ -35,18 +35,17 @@ def get_model(name):
 
 def get_train_test_loaders(path, batch_size, num_workers, distributed=False, pin_memory=True):
 
-    train_transform = Compose([
-        Pad(4),
-        RandomCrop(32, fill=128),
-        RandomHorizontalFlip(),
-        ToTensor(),
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
+    train_transform = Compose(
+        [
+            Pad(4),
+            RandomCrop(32, fill=128),
+            RandomHorizontalFlip(),
+            ToTensor(),
+            Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ]
+    )
 
-    test_transform = Compose([
-        ToTensor(),
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
+    test_transform = Compose([ToTensor(), Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
 
     if not os.path.exists(path):
         os.makedirs(path)
@@ -64,34 +63,41 @@ def get_train_test_loaders(path, batch_size, num_workers, distributed=False, pin
         train_sampler = DistributedSampler(train_ds)
         test_sampler = DistributedSampler(test_ds, shuffle=False)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler,
-                              num_workers=num_workers, pin_memory=pin_memory, drop_last=True)
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        sampler=train_sampler,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=True,
+    )
 
-    test_loader = DataLoader(test_ds, batch_size=batch_size * 2, sampler=test_sampler,
-                             num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = DataLoader(
+        test_ds, batch_size=batch_size * 2, sampler=test_sampler, num_workers=num_workers, pin_memory=pin_memory
+    )
 
-    train_eval_loader = DataLoader(train_eval_ds, batch_size=batch_size * 2, sampler=test_sampler,
-                                   num_workers=num_workers, pin_memory=pin_memory)
+    train_eval_loader = DataLoader(
+        train_eval_ds, batch_size=batch_size * 2, sampler=test_sampler, num_workers=num_workers, pin_memory=pin_memory
+    )
 
     return train_loader, test_loader, train_eval_loader
 
 
-def get_train_test_loaders_with_example_echoing(path, batch_size, num_workers, 
-                                                num_echoes=3, echoing_before_dataaug=True,
-                                                distributed=False, pin_memory=True):
+def get_train_test_loaders_with_example_echoing(
+    path, batch_size, num_workers, num_echoes=3, echoing_before_dataaug=True, distributed=False, pin_memory=True
+):
 
-    train_transform = Compose([
-        Pad(4),
-        RandomCrop(32, fill=128),
-        RandomHorizontalFlip(),
-        ToTensor(),
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
+    train_transform = Compose(
+        [
+            Pad(4),
+            RandomCrop(32, fill=128),
+            RandomHorizontalFlip(),
+            ToTensor(),
+            Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ]
+    )
 
-    test_transform = Compose([
-        ToTensor(),
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
+    test_transform = Compose([ToTensor(), Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
 
     if not os.path.exists(path):
         os.makedirs(path)
@@ -99,7 +105,7 @@ def get_train_test_loaders_with_example_echoing(path, batch_size, num_workers,
     else:
         download = True if len(os.listdir(path)) < 1 else False
 
-    train_ds = datasets.CIFAR10(root=path, train=True, download=download, transform=train_transform)    
+    train_ds = datasets.CIFAR10(root=path, train=True, download=download, transform=train_transform)
     test_ds = datasets.CIFAR10(root=path, train=False, download=False, transform=test_transform)
     train_eval_ds = datasets.CIFAR10(root=path, train=True, download=False, transform=test_transform)
 
@@ -112,14 +118,22 @@ def get_train_test_loaders_with_example_echoing(path, batch_size, num_workers,
         train_sampler = DistributedProxySampler(train_sampler)
         test_sampler = DistributedSampler(test_ds, shuffle=False)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler,
-                              num_workers=num_workers, pin_memory=pin_memory, drop_last=True)
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        sampler=train_sampler,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=True,
+    )
 
-    test_loader = DataLoader(test_ds, batch_size=batch_size * 2, sampler=test_sampler,
-                             num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = DataLoader(
+        test_ds, batch_size=batch_size * 2, sampler=test_sampler, num_workers=num_workers, pin_memory=pin_memory
+    )
 
-    train_eval_loader = DataLoader(train_eval_ds, batch_size=batch_size * 2, sampler=test_sampler,
-                                   num_workers=num_workers, pin_memory=pin_memory)
+    train_eval_loader = DataLoader(
+        train_eval_ds, batch_size=batch_size * 2, sampler=test_sampler, num_workers=num_workers, pin_memory=pin_memory
+    )
 
     return train_loader, test_loader, train_eval_loader
 
@@ -143,7 +157,7 @@ class DistributedProxySampler(data_dist.DistributedSampler):
         rank (optional): Rank of the current process within num_replicas.
     """
 
-    def __init__(self, sampler, num_replicas=None, rank=None):        
+    def __init__(self, sampler, num_replicas=None, rank=None):
         super(DistributedProxySampler, self).__init__(sampler, num_replicas=num_replicas, rank=rank, shuffle=False)
         self.sampler = sampler
 
@@ -153,12 +167,12 @@ class DistributedProxySampler(data_dist.DistributedSampler):
         indices = list(self.sampler)
 
         # add extra samples to make it evenly divisible
-        indices += indices[:(self.total_size - len(indices))]
+        indices += indices[: (self.total_size - len(indices))]
         if len(indices) != self.total_size:
             raise RuntimeError("{} vs {}".format(len(indices), self.total_size))
 
         # subsample
-        indices = indices[self.rank:self.total_size:self.num_replicas]
+        indices = indices[self.rank : self.total_size : self.num_replicas]
         if len(indices) != self.num_samples:
             raise RuntimeError("{} vs {}".format(len(indices), self.num_samples))
 

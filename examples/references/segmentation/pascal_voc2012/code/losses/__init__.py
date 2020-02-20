@@ -20,7 +20,7 @@ class SumOfLosses(nn.Module):
         if names is not None:
             assert isinstance(names, (list, tuple)) and len(names) == len(losses)
         else:
-            names = ['loss_{}'.format(i) for i in range(len(losses))]
+            names = ["loss_{}".format(i) for i in range(len(losses))]
         super(SumOfLosses, self).__init__()
         self.losses = losses
         self.coeffs = coeffs
@@ -29,8 +29,5 @@ class SumOfLosses(nn.Module):
 
     def forward(self, y_pred, y):
         loss_results = [l(y_pred, y) for l in self.losses]
-        total_loss = torch.sum(
-            torch.cat([c * l.unsqueeze(0) for c, l in zip(self.coeffs, loss_results)], dim=0),
-            dim=0
-        )
+        total_loss = torch.sum(torch.cat([c * l.unsqueeze(0) for c, l in zip(self.coeffs, loss_results)], dim=0), dim=0)
         return {n: v for n, v in zip([self.total_loss_name, *self.names], [total_loss, *loss_results])}
