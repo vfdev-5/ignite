@@ -7,13 +7,18 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lrs
 import torch.distributed as dist
 
-from torchvision.models.resnet import resnet50
-
 import albumentations as A
 from albumentations.pytorch import ToTensorV2 as ToTensor
 
-from dataflow.dataloaders import get_train_val_loaders
-from dataflow.transforms import denormalize
+from ignite.contrib.experimental import MemoizingDataset, ExampleEchoingSampler
+from ignite.contrib.experimental.data_echoing import DistributedProxySampler
+
+from dataflow.datasets import get_train_dataset
+from dataflow.dataloaders import get_train_val_loaders, get_dataloader
+from dataflow.transforms import denormalize, prepare_batch_fp32
+
+from efficientnet_pytorch import EfficientNet
+
 
 # ##############################
 # Global configs
@@ -33,9 +38,10 @@ val_interval = 2
 train_crop_size = 224
 val_crop_size = 320
 
-batch_size = 64  # batch size per local rank
-num_workers = 10  # num_workers per local rank
+batch_size = 128  # batch size per local rank
+num_workers = 16  # num_workers per local rank
 
+num_echoes = 3
 
 # ##############################
 # Setup Dataflow
@@ -51,7 +57,7 @@ train_transforms = A.Compose(
     [
         A.RandomResizedCrop(train_crop_size, train_crop_size, scale=(0.08, 1.0)),
         A.HorizontalFlip(),
-        A.CoarseDropout(max_height=32, max_width=32),
+        A.CoarseDropout(max_height=64, max_width=64),
         A.HueSaturationValue(),
         A.Normalize(mean=mean, std=std),
         ToTensor(),
@@ -68,25 +74,45 @@ val_transforms = A.Compose(
     ]
 )
 
-train_loader, val_loader, train_eval_loader = get_train_val_loaders(
-    data_path,
+train_ds = get_train_dataset(data_path)
+train_ds = MemoizingDataset(train_ds)
+
+train_sampler = ExampleEchoingSampler(num_echoes=num_echoes, dataset_length=len(train_ds))
+train_sampler = DistributedProxySampler(train_sampler)
+train_loader = get_dataloader(
+    train_ds,
+    transforms=train_transforms,
+    limit_num_samples=100 if debug else None,
+    batch_size=batch_size,
+    num_workers=num_workers,
+    sampler=train_sampler,
+    pin_memory=True,
+)
+
+_, val_loader, train_eval_loader = get_train_val_loaders(
+    root_path=data_path,
     train_transforms=train_transforms,
     val_transforms=val_transforms,
     batch_size=batch_size,
     num_workers=num_workers,
-    val_batch_size=batch_size,
-    pin_memory=True,
-    train_sampler="distributed"
+    train_sampler="distributed",
+    limit_val_num_samples=100 if debug else None,
 )
 
 # Image denormalization function to plot predictions with images
 img_denormalize = partial(denormalize, mean=mean, std=std)
 
+prepare_batch = prepare_batch_fp32
+
+# epoch_length = (dataset_size / num_echoes + batch_size - 1) // batch_size
+epoch_length = (len(train_loader.sampler) // num_echoes + batch_size - 1) // batch_size
+
+
 # ##############################
 # Setup Model
 # ##############################
 
-model = resnet50(pretrained=False)
+model = EfficientNet.from_name('efficientnet-b0')
 
 
 # ##############################

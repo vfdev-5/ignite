@@ -1,4 +1,4 @@
-name: pascal_voc2012_env
+name: imagenet_env
 channels:
   - defaults
   - pytorch
@@ -18,3 +18,4 @@ dependencies:
     - pynvml
     - git+https://github.com/pytorch/ignite.git
     - git+https://github.com/vfdev-5/ImageDatasetViz.git
+    - efficientnet-pytorch

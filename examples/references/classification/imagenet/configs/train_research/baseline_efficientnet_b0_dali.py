@@ -7,13 +7,14 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lrs
 import torch.distributed as dist
 
-from torchvision.models.resnet import resnet50
+import nvidia.dali.ops as ops
+import nvidia.dali.types as types
 
-import albumentations as A
-from albumentations.pytorch import ToTensorV2 as ToTensor
-
-from dataflow.dataloaders import get_train_val_loaders
+from dataflow.dali_dataloaders import get_train_val_loaders, dali_random_args
 from dataflow.transforms import denormalize
+
+from efficientnet_pytorch import EfficientNet
+
 
 # ##############################
 # Global configs
@@ -33,8 +34,8 @@ val_interval = 2
 train_crop_size = 224
 val_crop_size = 320
 
-batch_size = 64  # batch size per local rank
-num_workers = 10  # num_workers per local rank
+batch_size = 128  # batch size per local rank
+num_workers = 16  # num_workers per local rank
 
 
 # ##############################
@@ -44,29 +45,23 @@ num_workers = 10  # num_workers per local rank
 assert "DATASET_PATH" in os.environ
 data_path = os.environ["DATASET_PATH"]
 
-mean = [0.485, 0.456, 0.406]
-std = [0.229, 0.224, 0.225]
+mean = [0.485 * 255,0.456 * 255,0.406 * 255]
+std = [0.229 * 255,0.224 * 255,0.225 * 255]
 
-train_transforms = A.Compose(
-    [
-        A.RandomResizedCrop(train_crop_size, train_crop_size, scale=(0.08, 1.0)),
-        A.HorizontalFlip(),
-        A.CoarseDropout(max_height=32, max_width=32),
-        A.HueSaturationValue(),
-        A.Normalize(mean=mean, std=std),
-        ToTensor(),
-    ]
-)
 
-val_transforms = A.Compose(
-    [
-        # https://github.com/facebookresearch/FixRes/blob/b27575208a7c48a3a6e0fa9efb57baa4021d1305/imnet_resnet50_scratch/transforms.py#L76
-        A.Resize(int((256 / 224) * val_crop_size), int((256 / 224) * val_crop_size)),
-        A.CenterCrop(val_crop_size, val_crop_size),
-        A.Normalize(mean=mean, std=std),
-        ToTensor(),
-    ]
-)
+train_transforms = [
+    ops.RandomResizedCrop(device="gpu", size=(train_crop_size, train_crop_size)),
+    dali_random_args(ops.Flip(device="gpu"), horizontal=ops.CoinFlip()),    
+    dali_random_args(ops.Hsv(device="gpu"), hue=ops.Uniform(range=(-10, 10)), saturation=ops.Uniform(range=(-5, 5))),    
+    ops.CropMirrorNormalize(device="gpu", mean=mean, std=std, output_dtype=types.FLOAT, output_layout=types.NCHW)
+]
+
+
+val_transforms = [
+    ops.Resize(device="gpu", resize_x=int((256 / 224) * val_crop_size), resize_y=int((256 / 224) * val_crop_size)),
+    ops.CropMirrorNormalize(device="gpu", crop=(val_crop_size, val_crop_size), mean=mean, std=std, output_dtype=types.FLOAT, output_layout=types.NCHW)
+]
+
 
 train_loader, val_loader, train_eval_loader = get_train_val_loaders(
     data_path,
@@ -74,10 +69,14 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(
     val_transforms=val_transforms,
     batch_size=batch_size,
     num_workers=num_workers,
-    val_batch_size=batch_size,
-    pin_memory=True,
-    train_sampler="distributed"
+    val_batch_size=batch_size
 )
+
+
+def prepare_batch(batch, *args, **kwargs):
+    x = batch[0]['data']
+    y = batch[0]['label'].squeeze(dim=-1)
+    return x, y
 
 # Image denormalization function to plot predictions with images
 img_denormalize = partial(denormalize, mean=mean, std=std)
@@ -86,7 +85,7 @@ img_denormalize = partial(denormalize, mean=mean, std=std)
 # Setup Model
 # ##############################
 
-model = resnet50(pretrained=False)
+model = EfficientNet.from_name('efficientnet-b0')
 
 
 # ##############################

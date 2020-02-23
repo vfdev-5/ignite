@@ -7,13 +7,14 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lrs
 import torch.distributed as dist
 
-from torchvision.models.resnet import resnet50
-
 import albumentations as A
 from albumentations.pytorch import ToTensorV2 as ToTensor
 
 from dataflow.dataloaders import get_train_val_loaders
-from dataflow.transforms import denormalize
+from dataflow.transforms import denormalize, prepare_batch_fp32
+
+from efficientnet_pytorch import EfficientNet
+
 
 # ##############################
 # Global configs
@@ -33,8 +34,8 @@ val_interval = 2
 train_crop_size = 224
 val_crop_size = 320
 
-batch_size = 64  # batch size per local rank
-num_workers = 10  # num_workers per local rank
+batch_size = 128  # batch size per local rank
+num_workers = 16  # num_workers per local rank
 
 
 # ##############################
@@ -51,7 +52,7 @@ train_transforms = A.Compose(
     [
         A.RandomResizedCrop(train_crop_size, train_crop_size, scale=(0.08, 1.0)),
         A.HorizontalFlip(),
-        A.CoarseDropout(max_height=32, max_width=32),
+        A.CoarseDropout(max_height=64, max_width=64),
         A.HueSaturationValue(),
         A.Normalize(mean=mean, std=std),
         ToTensor(),
@@ -82,11 +83,13 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(
 # Image denormalization function to plot predictions with images
 img_denormalize = partial(denormalize, mean=mean, std=std)
 
+prepare_batch = prepare_batch_fp32
+
 # ##############################
 # Setup Model
 # ##############################
 
-model = resnet50(pretrained=False)
+model = EfficientNet.from_name('efficientnet-b0')
 
 
 # ##############################

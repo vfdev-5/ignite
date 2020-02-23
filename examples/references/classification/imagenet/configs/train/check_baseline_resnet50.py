@@ -76,8 +76,7 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(
     num_workers=num_workers,
     val_batch_size=batch_size,
     pin_memory=True,
-    train_sampler="distributed",
-    val_sampler="distributed",
+    train_sampler="distributed"
 )
 
 # Image denormalization function to plot predictions with images

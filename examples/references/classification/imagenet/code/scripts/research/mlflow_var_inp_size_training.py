@@ -1,5 +1,6 @@
 # This a training script launched with py_config_runner
 # It should obligatory contain `run(config, **kwargs)` method
+from pathlib import Path
 
 import torch
 import torch.distributed as dist
@@ -7,6 +8,9 @@ import torch.distributed as dist
 from apex import amp
 from apex.parallel import DistributedDataParallel as DDP
 
+import mlflow
+
+import ignite
 from ignite.engine import Engine, Events, _prepare_batch, create_supervised_evaluator
 from ignite.metrics import Accuracy, TopKCategoricalAccuracy
 
@@ -14,6 +18,7 @@ from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.engines import common
 
 from py_config_runner.utils import set_seed
+from py_config_runner.config_utils import get_params, TRAINVAL_CONFIG, assert_config
 
 from utils.handlers import predictions_gt_images_handler, DataflowBenchmark
 
@@ -89,6 +94,37 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
         DataflowBenchmark(benchmark_dataflow_num_iters, prepare_batch=prepare_batch, device=device).attach(
             trainer, train_loader
         )
+
+    # Schedule training image size
+    assert hasattr(config, "train_transforms")
+    assert hasattr(config, "resized_crop_aug")
+    resize_aug = config.train_transforms.transforms[0]
+    resized_crop_aug = config.resized_crop_aug
+
+    assert hasattr(config, "max_train_crop_size")
+    assert hasattr(resize_aug, "height")
+    assert hasattr(resize_aug, "width")
+    assert hasattr(resized_crop_aug, "height")
+    assert hasattr(resized_crop_aug, "width")
+
+    max_train_crop_size = getattr(config, "max_train_crop_size")
+    switch_to_resized_crop = False
+
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def schedule_traingin_image_size(_):
+        nonlocal switch_to_resized_crop, resize_aug
+
+        resize_aug.height = min(resize_aug.height + 10, max_train_crop_size)
+        resize_aug.width = min(resize_aug.width + 10, max_train_crop_size)
+
+        if resize_aug.width >= 128 and switch_to_resized_crop:
+            # replace resize by resized crop
+            resized_crop_aug.height = resize_aug.height
+            resized_crop_aug.width = resize_aug.width
+            config.train_transforms.transforms.transforms[0] = resized_crop_aug
+            resize_aug = config.train_transforms.transforms[0]
+            switch_to_resized_crop = False
+
 
     # Setup evaluators
     val_metrics = {"Accuracy": Accuracy(device=device), "Top-5 Accuracy": TopKCategoricalAccuracy(k=5, device=device)}
@@ -166,4 +202,53 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
             event_name=Events.ITERATION_COMPLETED(once=len(train_eval_loader) // 2),
         )
 
+        if resize_aug is not None:
+            @trainer.on(Events.EPOCH_STARTED)
+            def log_train_image_size(_):                
+                tb_logger.writer.add_scalar("training/image_size", resize_aug.width, global_step=trainer.state.epoch)
+
     trainer.run(train_loader, max_epochs=config.num_epochs, epoch_length=getattr(config, "epoch_length", None))
+
+
+def run(config, logger=None, local_rank=0, **kwargs):
+
+    assert torch.cuda.is_available()
+    assert torch.backends.cudnn.enabled, "Nvidia/Amp requires cudnn backend to be enabled."
+
+    dist.init_process_group("nccl", init_method="env://")
+
+    # As we passed config with option --manual_config_load
+    assert hasattr(config, "setup"), (
+        "We need to manually setup the configuration, please set --manual_config_load " "to py_config_runner"
+    )
+
+    config = config.setup()
+
+    assert_config(config, TRAINVAL_CONFIG)
+    # The following attributes are automatically added by py_config_runner
+    assert hasattr(config, "config_filepath") and isinstance(config.config_filepath, Path)
+    assert hasattr(config, "script_filepath") and isinstance(config.script_filepath, Path)
+
+    # dump python files to reproduce the run
+    mlflow.log_artifact(config.config_filepath.as_posix())
+    mlflow.log_artifact(config.script_filepath.as_posix())
+
+    output_path = mlflow.get_artifact_uri()
+    config.output_path = Path(output_path)
+
+    if dist.get_rank() == 0:
+        mlflow.log_params({"pytorch version": torch.__version__, "ignite version": ignite.__version__})
+        mlflow.log_params(get_params(config, TRAINVAL_CONFIG))
+
+    try:
+        training(config, local_rank=local_rank, with_mlflow_logging=True, with_plx_logging=False)
+    except KeyboardInterrupt:
+        logger.info("Catched KeyboardInterrupt -> exit")
+    except Exception as e:  # noqa
+        logger.exception("")
+        mlflow.log_param("Run Status", "FAILED")
+        dist.destroy_process_group()
+        raise e
+
+    mlflow.log_param("Run Status", "OK")
+    dist.destroy_process_group()
