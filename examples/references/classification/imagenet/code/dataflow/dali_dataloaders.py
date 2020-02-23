@@ -31,7 +31,7 @@ def get_train_val_loaders(
     val_batch_size: Optional[int] = None,
     device_id: int = 0,
 ):
-    
+
     assert Path(root_path).exists()
 
     world_size = dist.get_world_size() if dist.is_initialized() else 1
@@ -51,12 +51,11 @@ def get_train_val_loaders(
     else:
         train_eval_ds = train_ds
 
-
     train_pipeline = ClassificationPipeline(
         dataset=train_ds,
-        transforms=train_transforms, 
-        batch_size=batch_size, 
-        device_id=device_id, 
+        transforms=train_transforms,
+        batch_size=batch_size,
+        device_id=device_id,
         num_threads=num_workers
     )
     train_pipeline.build()
@@ -64,30 +63,30 @@ def get_train_val_loaders(
 
     val_pipeline = ClassificationPipeline(
         dataset=val_ds,
-        transforms=val_transforms, 
+        transforms=val_transforms,
         batch_size=val_batch_size,
-        device_id=device_id, 
+        device_id=device_id,
         num_threads=num_workers,
         shuffle=False,
     )
     val_pipeline.build()
     val_loader = DALIClassificationIterator(
-        val_pipeline, 
+        val_pipeline,
         size=val_pipeline.size // val_batch_size,
         fill_last_batch=False,
         auto_reset=True)
 
     train_eval_pipeline = ClassificationPipeline(
         dataset=train_eval_ds,
-        transforms=val_transforms, 
-        batch_size=val_batch_size, 
-        device_id=device_id, 
+        transforms=val_transforms,
+        batch_size=val_batch_size,
+        device_id=device_id,
         num_threads=num_workers,
         shuffle=False,
     )
     train_eval_pipeline.build()
     train_eval_loader = DALIClassificationIterator(
-        train_eval_pipeline, 
+        train_eval_pipeline,
         size=train_eval_pipeline.size // val_batch_size,
         fill_last_batch=False,
         auto_reset=True)
@@ -98,7 +97,7 @@ def get_train_val_loaders(
 class TorchDatasetReader:
 
     def __init__(self, dataset, batch_size, shuffle=False, shard_id=0, num_shards=1):
-        
+
         self.batch_size = batch_size
         self.shard_id = shard_id
         self.num_shards = num_shards
@@ -108,7 +107,7 @@ class TorchDatasetReader:
             indices = list(range(len(dataset)))
             indices = indices[self.len * shard_id // num_shards: self.total_size * (shard_id + 1) // num_shards]
             dataset = Subset(dataset, indices)
-            
+
         self.dataset = dataset
         self.sampler = RandomSampler(dataset) if shuffle else SequentialSampler(dataset)
 
@@ -133,26 +132,36 @@ class TorchDatasetReader:
 
 class ClassificationPipeline(Pipeline):
 
-    def __init__(self, dataset, transforms, batch_size=16, device_id=0, num_threads=4, shuffle=True):        
-        super(ClassificationPipeline, self).__init__(batch_size=batch_size, num_threads=num_threads, device_id=device_id)
+    def __init__(self, dataset, transforms, batch_size=16, device_id=0, num_threads=4, shuffle=True):
+        super(
+            ClassificationPipeline,
+            self).__init__(
+            batch_size=batch_size,
+            num_threads=num_threads,
+            device_id=device_id)
         num_shards = dist.get_world_size() if dist.is_initialized() else 1
 
         self.transforms = transforms
 
         self.image = ops.ExternalSource()
         self.target = ops.ExternalSource()
-        extdata = TorchDatasetReader(dataset, batch_size=batch_size, shuffle=shuffle, shard_id=device_id, num_shards=num_shards)
+        extdata = TorchDatasetReader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            shard_id=device_id,
+            num_shards=num_shards)
         self.external_data = extdata
         self.iterator = iter(self.external_data)
 
     def define_graph(self):
         self.batch_x = self.image()
         self.batch_y = self.target()
-        
+
         batch_x = self.batch_x.gpu()
         for op in self.transforms:
             batch_x = op(batch_x)
-        
+
         return batch_x, self.batch_y.gpu()
 
     @property
@@ -186,5 +195,5 @@ def dali_random_args(op, **kwargs):
     def wrapper(*args):
         called_kwargs = {k: v() for k, v in kwargs.items()}
         return op(*args, **called_kwargs)
-    
+
     return wrapper

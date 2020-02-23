@@ -125,7 +125,6 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
             resize_aug = config.train_transforms.transforms[0]
             switch_to_resized_crop = False
 
-
     # Setup evaluators
     val_metrics = {"Accuracy": Accuracy(device=device), "Top-5 Accuracy": TopKCategoricalAccuracy(k=5, device=device)}
 
@@ -204,7 +203,7 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
         if resize_aug is not None:
             @trainer.on(Events.EPOCH_STARTED)
-            def log_train_image_size(_):                
+            def log_train_image_size(_):
                 tb_logger.writer.add_scalar("training/image_size", resize_aug.width, global_step=trainer.state.epoch)
 
     trainer.run(train_loader, max_epochs=config.num_epochs, epoch_length=getattr(config, "epoch_length", None))

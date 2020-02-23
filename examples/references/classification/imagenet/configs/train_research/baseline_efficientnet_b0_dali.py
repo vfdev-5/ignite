@@ -51,16 +51,28 @@ std = [0.229 * 255,0.224 * 255,0.225 * 255]
 
 train_transforms = [
     ops.RandomResizedCrop(device="gpu", size=(train_crop_size, train_crop_size)),
-    dali_random_args(ops.Flip(device="gpu"), horizontal=ops.CoinFlip()),    
-    dali_random_args(ops.Hsv(device="gpu"), hue=ops.Uniform(range=(-10, 10)), saturation=ops.Uniform(range=(-5, 5))),    
+    dali_random_args(ops.Flip(device="gpu"), horizontal=ops.CoinFlip()),
+    dali_random_args(ops.Hsv(device="gpu"), hue=ops.Uniform(range=(-10, 10)), saturation=ops.Uniform(range=(-5, 5))),
     ops.CropMirrorNormalize(device="gpu", mean=mean, std=std, output_dtype=types.FLOAT, output_layout=types.NCHW)
 ]
 
 
 val_transforms = [
-    ops.Resize(device="gpu", resize_x=int((256 / 224) * val_crop_size), resize_y=int((256 / 224) * val_crop_size)),
-    ops.CropMirrorNormalize(device="gpu", crop=(val_crop_size, val_crop_size), mean=mean, std=std, output_dtype=types.FLOAT, output_layout=types.NCHW)
-]
+    ops.Resize(
+        device="gpu",
+        resize_x=int(
+            (256 / 224) * val_crop_size),
+        resize_y=int(
+            (256 / 224) * val_crop_size)),
+    ops.CropMirrorNormalize(
+        device="gpu",
+        crop=(
+            val_crop_size,
+            val_crop_size),
+        mean=mean,
+        std=std,
+        output_dtype=types.FLOAT,
+        output_layout=types.NCHW)]
 
 
 train_loader, val_loader, train_eval_loader = get_train_val_loaders(

@@ -37,7 +37,7 @@ def opencv_loader(path):
 def get_train_dataset(root_path):
     train_ds = ImageNet(
         root_path, split="train", loader=opencv_loader
-    )    
+    )
     return TransformedDataset(train_ds, lambda dp: {"image": dp[0], "target": dp[1]})
 
 
