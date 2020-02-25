@@ -46,7 +46,9 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
     original_optimizer = config.optimizer
 
     def _setup_model_optimizer(original_model, original_optimizer):
-        model, optimizer = amp.initialize(original_model, original_optimizer, opt_level=getattr(config, "fp16_opt_level", "O2"), num_losses=1)
+        model, optimizer = amp.initialize(
+            original_model, original_optimizer, opt_level=getattr(
+                config, "fp16_opt_level", "O2"), num_losses=1)
         model = DDP(model, delay_allreduce=True)
         return model, optimizer
 
@@ -136,7 +138,7 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
     max_grow = 10
     # @trainer.on(Events.EPOCH_STARTED(every=3))
     @trainer.on(Events.EPOCH_STARTED)
-    def grow_model(_):        
+    def grow_model(_):
         nonlocal model, optimizer, max_grow
         if max_grow > 0:
             original_model.grow(device)
@@ -223,7 +225,7 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
         if resize_aug is not None:
             @trainer.on(Events.EPOCH_STARTED)
-            def log_train_image_size(_):                
+            def log_train_image_size(_):
                 tb_logger.writer.add_scalar("training/image_size", resize_aug.width, global_step=trainer.state.epoch)
 
     trainer.run(train_loader, max_epochs=config.num_epochs, epoch_length=getattr(config, "epoch_length", None))
