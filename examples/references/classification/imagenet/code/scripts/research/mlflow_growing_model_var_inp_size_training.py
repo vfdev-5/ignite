@@ -40,10 +40,17 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
     train_eval_loader = config.train_eval_loader
     val_loader = config.val_loader
 
-    model = config.model.to(device)
-    optimizer = config.optimizer
-    model, optimizer = amp.initialize(model, optimizer, opt_level=getattr(config, "fp16_opt_level", "O2"), num_losses=1)
-    model = DDP(model, delay_allreduce=True)
+    original_model = config.model.to(device)
+    print("Original model numel:", sum([p.numel() for p in original_model.parameters()]))
+    assert hasattr(original_model, "grow")
+    original_optimizer = config.optimizer
+
+    def _setup_model_optimizer(original_model, original_optimizer):
+        model, optimizer = amp.initialize(original_model, original_optimizer, opt_level=getattr(config, "fp16_opt_level", "O2"), num_losses=1)
+        model = DDP(model, delay_allreduce=True)
+        return model, optimizer
+
+    model, optimizer = _setup_model_optimizer(original_model, original_optimizer)
     criterion = config.criterion.to(device)
 
     prepare_batch = getattr(config, "prepare_batch", _prepare_batch)
@@ -125,6 +132,19 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
             resize_aug = config.train_transforms.transforms[0]
             switch_to_resized_crop = False
 
+    # Grow model
+    max_grow = 10
+    # @trainer.on(Events.EPOCH_STARTED(every=3))
+    @trainer.on(Events.EPOCH_STARTED)
+    def grow_model(_):        
+        nonlocal model, optimizer, max_grow
+        if max_grow > 0:
+            original_model.grow(device)
+            original_optimizer.param_groups[0]['params'] = list(original_model.parameters())
+            model, optimizer = _setup_model_optimizer(original_model, original_optimizer)
+            print("Grown model numel:", sum([p.numel() for p in original_model.parameters()]))
+            max_grow -= 1
+
     # Setup evaluators
     val_metrics = {"Accuracy": Accuracy(device=device), "Top-5 Accuracy": TopKCategoricalAccuracy(k=5, device=device)}
 
@@ -203,7 +223,7 @@ def training(config, local_rank=None, with_mlflow_logging=False, with_plx_loggin
 
         if resize_aug is not None:
             @trainer.on(Events.EPOCH_STARTED)
-            def log_train_image_size(_):
+            def log_train_image_size(_):                
                 tb_logger.writer.add_scalar("training/image_size", resize_aug.width, global_step=trainer.state.epoch)
 
     trainer.run(train_loader, max_epochs=config.num_epochs, epoch_length=getattr(config, "epoch_length", None))
