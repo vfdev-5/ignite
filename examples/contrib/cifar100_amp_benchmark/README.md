@@ -5,6 +5,12 @@ In this folder we provide scripts to benchmark 1) native PyTorch mixed precision
 
 We will train Wide-ResNet model on Cifar100 dataset using Turing enabled GPU and compare training times.
 
+## Requirements
+
+```bash
+pip install pytorch-ignite fire
+```
+
 ## Download dataset
 
 ```bash

@@ -2,7 +2,7 @@ import fire
 
 import torch
 from torch.nn import CrossEntropyLoss
-from torch.optim import SGD
+from torch.optim import Adam
 
 from torchvision.models import wide_resnet50_2
 
@@ -31,7 +31,7 @@ def main(dataset_path, batch_size=256, max_epochs=10):
     train_loader, test_loader, eval_train_loader = get_train_eval_loaders(dataset_path, batch_size=batch_size)
 
     model = wide_resnet50_2(num_classes=100).to(device)
-    optimizer = SGD(model.parameters(), lr=0.01)
+    optimizer = Adam(model.parameters(), lr=0.001)
     criterion = CrossEntropyLoss().to(device)
 
     idist.set_local_rank(0)
@@ -39,12 +39,22 @@ def main(dataset_path, batch_size=256, max_epochs=10):
     ds_args = Args()
     ds_args.local_rank = 0
     ds_args.deepspeed_config = None
-    ds_config_params = {"train_batch_size": batch_size, "steps_per_print": len(train_loader)}
+    ds_config_params = {
+        "train_batch_size": batch_size,
+        "steps_per_print": len(train_loader),
+        "fp16": {
+            "enabled": "true",
+        },
+        "zero_optimization": {
+            "stage": 2,
+        },
+        "zero_allow_untested_optimizer": "true"
+    }
     model_engine = DeepSpeedLight(ds_args, model, optimizer=optimizer, config_params=ds_config_params)
     model_engine.tput_timer.steps_per_output = len(train_loader)
 
     def train_step(engine, batch):
-        x = convert_tensor(batch[0], device, non_blocking=True)
+        x = convert_tensor(batch[0], device, non_blocking=True).half()
         y = convert_tensor(batch[1], device, non_blocking=True)
 
         optimizer.zero_grad()
