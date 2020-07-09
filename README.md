@@ -426,6 +426,7 @@ As always, PRs are welcome :)
 -   [CNN-CASS: CNN for Classification of Coronary Artery Stenosis Score in MPR Images](https://github.com/ucuapps/CoronaryArteryStenosisScoreClassification)
 -   [Bridging Text and Video: A Universal Multimodal Transformer for Video-Audio Scene-Aware Dialog](https://github.com/ictnlp/DSTC8-AVSD)
 -   [Adversarial Decomposition of Text Representation](https://github.com/text-machine-lab/adversarial_decomposition)
+-   [Uncertainty Estimation Using a Single Deep Deterministic Neural Network](https://github.com/y0ast/deterministic-uncertainty-quantification)
 
 ## Blog articles, tutorials, books
 
@@ -462,8 +463,6 @@ description of the project.
 
 <!-- ############################################################################################################### -->
 
+# About the team & Disclaimer
 
-# About the team
-
-Project is currently maintained by a team of volunteers.
-See the ["About us"](https://pytorch.org/ignite/master/about.html) page for a list of core contributors.
+This repository is operated and maintained by volunteers in the PyTorch community in their capacities as individuals (and not as representatives of their employers). See the ["About us"](https://pytorch.org/ignite/master/about.html) page for a list of core contributors. For questions and issues, please see the various channels [here](https://github.com/pytorch/ignite#communication).
