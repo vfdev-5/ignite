@@ -1,0 +1,31 @@
+FROM pytorch/pytorch:1.6.0-cuda10.1-cudnn7-devel as builder
+
+LABEL description="Latest PyTorch, Ignite and Horovod"
+
+# Build Horovod
+RUN apt-get update && apt-get install -y git && \
+        git clone --recursive https://github.com/horovod/horovod.git /horovod && \
+        conda install -y cmake=3.16 nccl=2.7 -c conda-forge && \
+        cd /horovod && python setup.py sdist && \
+        HOROVOD_GPU_OPERATIONS=NCCL HOROVOD_NCCL_LINK=SHARED HOROVOD_WITHOUT_MPI=1 HOROVOD_WITH_PYTORCH=1 pip install -v $(ls /horovod/dist/horovod-*.tar.gz) && ldconfig && \
+        rm -rf /var/lib/apt/lists/* && rm -rf /horovod
+
+RUN git clone https://github.com/pytorch/ignite.git /ignite
+
+
+FROM pytorch/pytorch:1.6.0-cuda10.1-cudnn7-runtime
+
+COPY --from=builder /opt/conda /opt/conda
+
+RUN pip install tensorboardX tensorboard trains tqdm && \
+    # Horovod support is available in >0.4.1 and in nightly releases:
+    pip install --pre pytorch-ignite
+
+COPY --from=builder /ignite/examples /workspace/pytorch-ignite-examples
+
+# RUN groupadd -g 61000 ignite && useradd -g 61000 -l -M -s /sbin/nologin -u 61000 ignite && \
+#     mkdir -p /home/ignite && chown -R ignite:ignite /workspace /home/ignite /opt/conda
+
+# USER ignite
+
+ENTRYPOINT ["/bin/bash"]
