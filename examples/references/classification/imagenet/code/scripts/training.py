@@ -22,7 +22,6 @@ from py_config_runner.config_utils import get_params, TRAINVAL_CONFIG, assert_co
 import sys
 
 # Adds "code" folder to python path
-print("Path(__file__).parent.parent.as_posix()", Path(__file__).parent.parent.as_posix())
 sys.path.insert(0, Path(__file__).parent.parent.as_posix())
 
 from utils.handlers import predictions_gt_images_handler

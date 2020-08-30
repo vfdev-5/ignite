@@ -20,7 +20,7 @@ pip install --upgrade trains
 pip install -r requirements.txt
 ```
 
-We need to also install Nvidia/APEX and libraries for opencv.
+We need also to install Nvidia/APEX and libraries for opencv.
 **Important**, please, check the content of `experiments/setup_opencv.sh` before running the script.
 ```bash
 sh experiments/setup_apex.sh
