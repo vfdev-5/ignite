@@ -78,7 +78,6 @@ Execute the following command:
 ```bash
 export TRAINS_OUTPUT_PATH=/path/to/output/trains
 # e.g export TRAINS_OUTPUT_PATH=$PWD/output/trains
-export PYTHONPATH=$PWD/code:$PYTHONPATH
 
 py_config_runner ./code/scripts/training.py ./configs/train/baseline_resnet50.py
 ```
@@ -89,7 +88,6 @@ Please, make sure to adapt training data loader batch size to your GPU type. By 
 ```bash
 export TRAINS_OUTPUT_PATH=/path/to/output/trains
 # e.g export TRAINS_OUTPUT_PATH=$PWD/output/trains
-export PYTHONPATH=$PWD/code:$PYTHONPATH
 
 python -m torch.distributed.launch --nproc 2 --use_env -m py_config_runner ./code/scripts/training.py ./configs/train/baseline_resnet50.py
 ```

@@ -15,23 +15,10 @@ environment:
 
 # Setup running environment:
 build:
-  image: pytorch/pytorch:1.5-cuda10.1-cudnn7-devel
+  image: pytorchignite/apex-vision:latest
   build_steps:
-
-  # For opencv
-  - apt-get update &&
-    TZ=America/New_York DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata &&
-    apt-get -y install --no-install-recommends libglib2.0 libsm6 libxext6 libxrender-dev git
-
-  # Install Nvidia/APEX
-  - git clone https://github.com/NVIDIA/apex /tmp/apex && cd /tmp/apex &&
-    export TORCH_CUDA_ARCH_LIST="6.0;6.1;6.2;7.0;7.5" &&
-    pip install --upgrade --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" .
-
-  # Install ignite and other useful packages
-  - pip install --upgrade --pre pytorch-ignite &&
-    pip install git+https://github.com/vfdev-5/ImageDatasetViz.git albumentations &&
-    pip install polyaxon-client tqdm tensorboardX py_config_runner pynvml
+  # Install other useful packages
+  - pip install "polyaxon-client<1.0" tqdm pynvml
 
 
 declarations:

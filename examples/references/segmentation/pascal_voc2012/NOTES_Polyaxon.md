@@ -1,10 +1,10 @@
-# Experiments tracking with Polyaxon
+# Experiments tracking with Polyaxon (<1.0)
 
 User can run Pascal VOC training using [Polyaxon experiments tracking system](https://polyaxon.com/).
 
 ## Requirements
 
-In this case we assume, user has [Polyaxon](https://polyaxon.com/) installed on a machine/cluster/cloud and can schedule experiments with `polyaxon-cli`.
+In this case we assume, user has [Polyaxon < 1.0](https://polyaxon.com/) installed on a machine/cluster/cloud and can schedule experiments with `polyaxon-cli`.
 
 ## Usage
 

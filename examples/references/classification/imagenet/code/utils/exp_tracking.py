@@ -129,3 +129,9 @@ elif has_trains:
     log_params = _trains_log_params
     setup_logging = common.setup_trains_logging
     log_artifact = _trains_log_artifact
+else:
+    raise RuntimeError(
+        "No experiment tracking system is setup. "
+        "Please, setup either MLflow, Polyaxon or Trains. "
+        "For more details see NOTES_*.md"
+    )
