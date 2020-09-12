@@ -30,11 +30,13 @@ fp16_opt_level = "O2"
 
 num_classes = 21
 
-batch_size = 9 * idist.get_world_size()  # total batch size
+# total batch size ~ 64 <--> lr_base = 0.007
+batch_size = 8 * idist.get_world_size()  # total batch size
 val_batch_size = batch_size * 2
 num_workers = 12
 val_interval = 3
-accumulation_steps = 4
+# optional, accumulation_steps=1 by default
+accumulation_steps = 64 // batch_size
 
 val_img_size = 513
 train_img_size = 480
@@ -111,7 +113,7 @@ num_epochs = 100
 
 criterion = nn.CrossEntropyLoss()
 
-lr = 0.007
+lr = 0.007 * (batch_size * accumulation_steps) / 64.0
 weight_decay = 5e-4
 momentum = 0.9
 nesterov = False
