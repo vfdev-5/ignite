@@ -75,7 +75,7 @@ class FastaiLRFinder:
         self._history = None
         self._best_loss = None
         self._lr_schedule = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(__name__ + "." + self.__class__.__name__)
 
     def _run(self, trainer, optimizer, output_transform, num_iter, end_lr, step_mode, smooth_f, diverge_th):
 
@@ -171,11 +171,11 @@ class FastaiLRFinder:
 
     def get_results(self):
         """
-        Returns: dictionary with loss and lr logs fromm the previous run
+        Returns: dictionary with loss and lr logs from the previous run
         """
         return self._history
 
-    def plot(self, skip_start=10, skip_end=5, log_lr=True):
+    def plot(self, skip_start=10, skip_end=5, log_lr=True, display_suggestion=True):
         """Plots the learning rate range test.
 
         This method requires `matplotlib` package to be installed:
@@ -185,12 +185,13 @@ class FastaiLRFinder:
             pip install matplotlib
 
         Args:
-            skip_start (int, optional): number of batches to trim from the start.
+            skip_start (int): number of batches to trim from the start.
                 Default: 10.
-            skip_end (int, optional): number of batches to trim from the start.
+            skip_end (int): number of batches to trim from the start.
                 Default: 5.
-            log_lr (bool, optional): True to plot the learning rate in a logarithmic
-                scale; otherwise, plotted in a linear scale. Default: True.
+            log_lr (bool): True to plot the learning rate in a logarithmic
+                scale. Otherwise, plotted in a linear scale. Default: True.
+            display_suggestion (bool): if True, vertical red line shows suggested learning rate.
         """
         try:
             from matplotlib import pyplot as plt
@@ -235,7 +236,10 @@ class FastaiLRFinder:
         if self._history is None:
             raise RuntimeError("learning rate finder didn't run yet so lr_suggestion can't be returned")
         loss = self._history["loss"]
-        grads = torch.tensor([loss[i] - loss[i - 1] for i in range(1, len(loss))])
+        grads = torch.tensor([
+            0.5 * (loss[i + 1] - loss[i - 1])
+            for i in range(1, len(loss) - 1)]
+        )
         min_grad_idx = grads.argmin() + 1
         return self._history["lr"][int(min_grad_idx)]
 
@@ -265,12 +269,12 @@ class FastaiLRFinder:
             trainer (Engine): lr_finder is attached to this trainer. Please, keep in mind that all attached handlers
                 will be executed.
             to_save (Mapping): dictionary with optimizer and other objects that needs to be restored after running
-                the LR finder. For example, `to_save={'optimizer': optimizer, 'model': model}`. All objects should
-                implement `state_dict` and `load_state_dict` methods.
-            output_transform (callable, optional): function that transforms the trainer's `state.output` after each
+                the LR finder. For example, ``to_save={'optimizer': optimizer, 'model': model}``. All objects should
+                implement ``state_dict`` and ``load_state_dict`` methods.
+            output_transform (callable, optional): function that transforms the trainer's ``state.output`` after each
                 iteration. It must return the loss of that iteration.
-            num_iter (int, optional): number of iterations for lr schedule between base lr and end_lr. Default, it will
-                run for `trainer.state.epoch_length * trainer.state.max_epochs`.
+            num_iter (int, optional): number of iterations for lr schedule between base lr and `end_lr`. Default,
+                it will run for ``trainer.state.epoch_length * trainer.state.max_epochs``.
             end_lr (float, optional): upper bound for lr search. Default, 10.0.
             step_mode (str, optional): "exp" or "linear", which way should the lr be increased from optimizer's initial
                 lr to `end_lr`. Default, "exp".

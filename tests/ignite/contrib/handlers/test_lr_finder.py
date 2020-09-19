@@ -6,8 +6,9 @@ import torch
 from torch import nn
 from torch.optim import SGD
 
+import ignite.distributed as idist
 from ignite.contrib.handlers import FastaiLRFinder
-from ignite.engine import create_supervised_trainer
+from ignite.engine import create_supervised_trainer, Events
 
 matplotlib.use("agg")
 
@@ -26,9 +27,13 @@ def no_site_packages():
 
 
 class DummyModel(nn.Module):
-    def __init__(self):
+    def __init__(self, n_channels=10, flatten_input=False):
         super(DummyModel, self).__init__()
-        self.net = nn.Linear(1, 1)
+
+        self.net = nn.Sequential(
+            nn.Flatten() if flatten_input else nn.Identity(),
+            nn.Linear(n_channels, 1)
+        )
 
     def forward(self, x):
         return self.net(x)
@@ -41,8 +46,19 @@ def model():
 
 
 @pytest.fixture
+def mnist_model():
+    model = DummyModel(n_channels=784, flatten_input=True)
+    yield model
+
+
+@pytest.fixture
 def optimizer(model):
-    yield SGD(model.parameters(), lr=1e-4, momentum=0.9)
+    yield SGD(model.parameters(), lr=1e-4, momentum=0.0)
+
+
+@pytest.fixture
+def mnist_optimizer(mnist_model):
+    yield SGD(mnist_model.parameters(), lr=1e-4, momentum=0.0)
 
 
 @pytest.fixture
@@ -63,7 +79,22 @@ def dummy_engine(model, optimizer):
 
 @pytest.fixture
 def dataloader():
-    yield torch.rand(100, 2, 1)
+    yield torch.rand(100, 2, 10)
+
+
+@pytest.fixture
+def mnist_dataloader(dirname):
+    from torch.utils.data import DataLoader
+    from torchvision.transforms import Compose, ToTensor, Normalize
+    from torchvision.datasets import MNIST
+
+    data_transform = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+
+    train_loader = DataLoader(
+        MNIST(download=True, root=dirname, transform=data_transform, train=True), batch_size=64, shuffle=True
+    )
+
+    yield train_loader
 
 
 def test_attach_incorrect_input_args(lr_finder, dummy_engine, model, optimizer, dataloader):
@@ -127,6 +158,8 @@ def test_with_attach(lr_finder, to_save, dummy_engine, dataloader):
         trainer_with_finder.run(dataloader)
 
     assert lr_finder.get_results() is not None
+    print(lr_finder.lr_suggestion())
+    assert False
 
     for event in dummy_engine._event_handlers:
         assert len(dummy_engine._event_handlers[event]) == 0
@@ -228,3 +261,37 @@ def test_no_matplotlib(no_site_packages, lr_finder):
 
     with pytest.raises(RuntimeError, match=r"This method requires matplotlib to be installed"):
         lr_finder.plot()
+
+
+def test_mnist_lr_suggestion(lr_finder, mnist_model, mnist_optimizer, mnist_dataloader):
+    criterion = nn.CrossEntropyLoss()
+    trainer = create_supervised_trainer(mnist_model, mnist_optimizer, criterion)
+    to_save = {"model": mnist_model, "optim": mnist_optimizer}
+
+    max_iters = 50
+
+    with lr_finder.attach(trainer, to_save) as trainer_with_finder:
+
+        with trainer_with_finder.add_event_handler(
+                Events.ITERATION_COMPLETED(once=max_iters),
+                lambda _: trainer_with_finder.terminate()
+        ):
+            trainer_with_finder.run(mnist_dataloader)
+
+    print(lr_finder.lr_suggestion())
+    assert False
+
+
+# @pytest.mark.distributed
+# @pytest.mark.skipif(not idist.has_native_dist_support, reason="Skip if no native dist support")
+# @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Skip if no GPU")
+# def test_distrib_gpu(local_rank, distributed_context_single_node_nccl):
+#     device = torch.device("cuda:{}".format(local_rank))
+#     _test_distrib_integration(device)
+#
+#
+# @pytest.mark.distributed
+# @pytest.mark.skipif(not idist.has_native_dist_support, reason="Skip if no native dist support")
+# def test_distrib_cpu(distributed_context_single_node_gloo):
+#     device = torch.device("cpu")
+#     _test_distrib_integration(device)
