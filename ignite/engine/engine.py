@@ -3,7 +3,9 @@ import time
 import warnings
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Any, Callable, Iterable, List, Optional, Union
+from typing import Any, Callable, Iterable, Iterator, List, Optional, Tuple, Union
+
+from torch.utils.data import DataLoader
 
 from ignite._utils import _to_hours_mins_secs
 from ignite.base import EventsDriven, Serializable
@@ -124,10 +126,10 @@ class Engine(Serializable, EventsDriven):
         self.should_terminate = False
         self.should_terminate_single_epoch = False
         self.state = State()
-        self._state_dict_user_keys = []
+        self._state_dict_user_keys = []  # type: List[str]
 
-        self._dataloader_iter = None
-        self._init_iter = []
+        self._dataloader_iter = None  # type: Optional[Iterator[Any]]
+        self._init_iter = []  # type: List[int]
 
         self.register_events(*Events)
 
@@ -264,7 +266,7 @@ class Engine(Serializable, EventsDriven):
         """
         return super(Engine, self).add_event_handler(event_name, handler, *args, **kwargs)
 
-    def has_event_handler(self, handler: Callable, event_name: Optional[Any] = None):
+    def has_event_handler(self, handler: Callable, event_name: Optional[Any] = None) -> bool:
         """Check if the specified event has the specified handler.
 
         Args:
@@ -274,7 +276,7 @@ class Engine(Serializable, EventsDriven):
         """
         return super(Engine, self).has_event_handler(handler, event_name=event_name)
 
-    def remove_event_handler(self, handler: Callable, event_name: Any):
+    def remove_event_handler(self, handler: Callable, event_name: Any) -> None:
         """Remove event handler `handler` from registered handlers of the engine
 
         Args:
@@ -284,7 +286,7 @@ class Engine(Serializable, EventsDriven):
         """
         super(Engine, self).remove_event_handler(handler, event_name=event_name)
 
-    def on(self, event_name, *args, **kwargs):
+    def on(self, event_name: Any, *args: Any, **kwargs: Any) -> Callable:
         """Decorator shortcut for add_event_handler.
 
         Args:
@@ -348,7 +350,7 @@ class Engine(Serializable, EventsDriven):
         )
         self.should_terminate_single_epoch = True
 
-    def _handle_exception(self, e: Exception) -> None:
+    def _handle_exception(self, e: BaseException) -> None:
         if Events.EXCEPTION_RAISED in self._event_handlers:
             self._fire_event(Events.EXCEPTION_RAISED, e)
         else:
@@ -385,7 +387,7 @@ class Engine(Serializable, EventsDriven):
                 a dictionary containing engine's state
 
         """
-        keys = self._state_dict_all_req_keys + (self._state_dict_one_of_opt_keys[0],)
+        keys = self._state_dict_all_req_keys + (self._state_dict_one_of_opt_keys[0],)  # type: Tuple[str, ...]
         keys += tuple(self._state_dict_user_keys)
         return OrderedDict([(k, getattr(self.state, k)) for k in keys])
 
@@ -443,9 +445,9 @@ class Engine(Serializable, EventsDriven):
 
     @staticmethod
     def _is_done(state: State) -> bool:
-        return state.iteration == state.epoch_length * state.max_epochs
+        return state.iteration == state.epoch_length * state.max_epochs  # type: ignore[operator]
 
-    def set_data(self, data):
+    def set_data(self, data: Union[Iterable, DataLoader]) -> None:
         """Method to set data. After calling the method the next batch passed to `processing_function` is
         from newly provided data. Please, note that epoch length is not modified.
 
@@ -593,21 +595,25 @@ class Engine(Serializable, EventsDriven):
         return self._internal_run()
 
     @staticmethod
-    def _init_timers(state: State):
+    def _init_timers(state: State) -> None:
         state.times[Events.EPOCH_COMPLETED.name] = 0.0
         state.times[Events.COMPLETED.name] = 0.0
 
-    def _get_data_length(self, data):
-        data_length = None
+    def _get_data_length(self, data: Iterable) -> Optional[int]:
         try:
             if hasattr(data, "__len__"):
-                data_length = len(data)
+                return len(data)  # type: ignore[arg-type]
         except TypeError:
             # _InfiniteConstantSampler can raise a TypeError on DataLoader length of a IterableDataset
             pass
-        return data_length
+        return None
 
     def _setup_engine(self) -> None:
+        if self.state.dataloader is None:
+            raise RuntimeError(
+                "Internal error, self.state.dataloader is None. Please, file an issue if you encounter this error."
+            )
+
         iteration = self.state.iteration
         self._dataloader_iter = iter(self.state.dataloader)
 
@@ -623,7 +629,7 @@ class Engine(Serializable, EventsDriven):
         try:
             start_time = time.time()
             self._fire_event(Events.STARTED)
-            while self.state.epoch < self.state.max_epochs and not self.should_terminate:
+            while self.state.epoch < self.state.max_epochs and not self.should_terminate:  # type: ignore[operator]
                 self.state.epoch += 1
                 self._fire_event(Events.EPOCH_STARTED)
 
@@ -674,6 +680,15 @@ class Engine(Serializable, EventsDriven):
         iter_counter = self._init_iter.pop() if len(self._init_iter) > 0 else 0
         should_exit = False
         try:
+            if self._dataloader_iter is None:
+                raise RuntimeError(
+                    "Internal error, self._dataloader_iter is None. Please, file an issue if you encounter this error."
+                )
+            if self.state.dataloader is None:
+                raise RuntimeError(
+                    "Internal error, self.state.dataloader is None. Please, file an issue if you encounter this error."
+                )
+
             while True:
                 try:
                     # Avoid Events.GET_BATCH_STARTED triggered twice when data iter is restarted
@@ -697,7 +712,8 @@ class Engine(Serializable, EventsDriven):
                                 "Data iterator can not provide data anymore but required total number of "
                                 "iterations to run is not reached. "
                                 "Current iteration: {} vs Total iterations to run : {}".format(
-                                    self.state.iteration, self.state.epoch_length * self.state.max_epochs
+                                    self.state.iteration,
+                                    self.state.epoch_length * self.state.max_epochs,  # type: ignore[operator]
                                 )
                             )
                         break
