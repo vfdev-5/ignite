@@ -778,14 +778,17 @@ def _test_gradients_on_resume(
         print("    W:", out_resumed["weights"])
 
     # check data:
+    assert len(out_original["data"]) == len(out_resumed["data"])
     for d1, d2 in zip(out_original["data"], out_resumed["data"]):
         assert d1 == d2
 
     # check grads:
+    assert len(out_original["grads"]) == len(out_resumed["grads"])
     for d1, d2 in zip(out_original["grads"], out_resumed["grads"]):
         assert d1 == d2
 
     # check weights:
+    assert len(out_original["weights"]) == len(out_resumed["weights"])
     for d1, d2 in zip(out_original["weights"], out_resumed["weights"]):
         assert d1 == d2
 

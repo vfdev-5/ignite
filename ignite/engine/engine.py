@@ -1,21 +1,19 @@
-import functools
 import logging
 import time
 import warnings
-import weakref
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any, Callable, Iterable, List, Optional, Union
 
 from ignite._utils import _to_hours_mins_secs
-from ignite.base import Serializable
-from ignite.engine.events import CallableEventWithFilter, EventEnum, Events, EventsList, RemovableEventHandle, State
+from ignite.base import EventsDriven, Serializable
+from ignite.engine.events import EventEnum, Events, State
 from ignite.engine.utils import _check_signature
 
 __all__ = ["Engine"]
 
 
-class Engine(Serializable):
+class Engine(Serializable, EventsDriven):
     """Runs a given ``process_function`` over each batch of a dataset, emitting events as it goes.
 
     Args:
@@ -120,15 +118,13 @@ class Engine(Serializable):
     _state_dict_one_of_opt_keys = ("iteration", "epoch")
 
     def __init__(self, process_function: Callable):
-        self._event_handlers = defaultdict(list)
+        super(Engine, self).__init__()
         self.logger = logging.getLogger(__name__ + "." + self.__class__.__name__)
         self._process_function = process_function
-        self.last_event_name = None
         self.should_terminate = False
         self.should_terminate_single_epoch = False
         self.state = State()
         self._state_dict_user_keys = []
-        self._allowed_events = []
 
         self._dataloader_iter = None
         self._init_iter = []
@@ -214,32 +210,13 @@ class Engine(Serializable):
             engine.run(data)
             # engine.state contains an attribute time_iteration, which can be accessed using engine.state.time_iteration
         """
-        if not (event_to_attr is None or isinstance(event_to_attr, dict)):
-            raise ValueError("Expected event_to_attr to be dictionary. Got {}.".format(type(event_to_attr)))
+        super(Engine, self).register_events(*event_names, event_to_attr=event_to_attr)
 
         for index, e in enumerate(event_names):
-            if not isinstance(e, (str, EventEnum)):
-                raise TypeError(
-                    "Value at {} of event_names should be a str or EventEnum, but given {}".format(index, e)
-                )
-            self._allowed_events.append(e)
             if event_to_attr and e in event_to_attr:
                 State.event_to_attr[e] = event_to_attr[e]
         # we need to update state attributes associated with new custom events
         self.state._update_attrs()
-
-    def _handler_wrapper(self, handler: Callable, event_name: Any, event_filter: Callable) -> Callable:
-        # signature of the following wrapper will be inspected during registering to check if engine is necessary
-        # we have to build a wrapper with relevant signature : solution is functools.wraps
-        @functools.wraps(handler)
-        def wrapper(*args, **kwargs) -> Any:
-            event = self.state.get_event_attrib_value(event_name)
-            if event_filter(self, event):
-                return handler(*args, **kwargs)
-
-        # setup input handler as parent to make has_event_handler work
-        wrapper._parent = weakref.ref(handler)
-        return wrapper
 
     def add_event_handler(self, event_name: Any, handler: Callable, *args, **kwargs):
         """Add an event handler to be executed when the specified event is fired.
@@ -285,41 +262,7 @@ class Engine(Serializable):
             See :class:`~ignite.engine.events.Events` for more details.
 
         """
-        if isinstance(event_name, EventsList):
-            for e in event_name:
-                self.add_event_handler(e, handler, *args, **kwargs)
-            return RemovableEventHandle(event_name, handler, self)
-        if (
-            isinstance(event_name, CallableEventWithFilter)
-            and event_name.filter != CallableEventWithFilter.default_event_filter
-        ):
-            event_filter = event_name.filter
-            handler = self._handler_wrapper(handler, event_name, event_filter)
-
-        if event_name not in self._allowed_events:
-            self.logger.error("attempt to add event handler to an invalid event %s.", event_name)
-            raise ValueError("Event {} is not a valid event for this Engine.".format(event_name))
-
-        event_args = (Exception(),) if event_name == Events.EXCEPTION_RAISED else ()
-        try:
-            _check_signature(handler, "handler", self, *(event_args + args), **kwargs)
-            self._event_handlers[event_name].append((handler, (self,) + args, kwargs))
-        except ValueError:
-            _check_signature(handler, "handler", *(event_args + args), **kwargs)
-            self._event_handlers[event_name].append((handler, args, kwargs))
-        self.logger.debug("added handler for event %s.", event_name)
-
-        return RemovableEventHandle(event_name, handler, self)
-
-    @staticmethod
-    def _assert_non_filtered_event(event_name: Any):
-        if (
-            isinstance(event_name, CallableEventWithFilter)
-            and event_name.filter != CallableEventWithFilter.default_event_filter
-        ):
-            raise TypeError(
-                "Argument event_name should not be a filtered event, " "please use event without any event filtering"
-            )
+        return super(Engine, self).add_event_handler(event_name, handler, *args, **kwargs)
 
     def has_event_handler(self, handler: Callable, event_name: Optional[Any] = None):
         """Check if the specified event has the specified handler.
@@ -329,23 +272,7 @@ class Engine(Serializable):
             event_name: The event the handler attached to. Set this
                 to ``None`` to search all events.
         """
-        if event_name is not None:
-            if event_name not in self._event_handlers:
-                return False
-            events = [event_name]
-        else:
-            events = self._event_handlers
-        for e in events:
-            for h, _, _ in self._event_handlers[e]:
-                if self._compare_handlers(handler, h):
-                    return True
-        return False
-
-    @staticmethod
-    def _compare_handlers(user_handler: Callable, registered_handler: Callable) -> bool:
-        if hasattr(registered_handler, "_parent"):
-            registered_handler = registered_handler._parent()
-        return registered_handler == user_handler
+        return super(Engine, self).has_event_handler(handler, event_name=event_name)
 
     def remove_event_handler(self, handler: Callable, event_name: Any):
         """Remove event handler `handler` from registered handlers of the engine
@@ -355,17 +282,7 @@ class Engine(Serializable):
             event_name: The event the handler attached to.
 
         """
-        if event_name not in self._event_handlers:
-            raise ValueError("Input event name '{}' does not exist".format(event_name))
-
-        new_event_handlers = [
-            (h, args, kwargs)
-            for h, args, kwargs in self._event_handlers[event_name]
-            if not self._compare_handlers(handler, h)
-        ]
-        if len(new_event_handlers) == len(self._event_handlers[event_name]):
-            raise ValueError("Input handler '{}' is not found among registered event handlers".format(handler))
-        self._event_handlers[event_name] = new_event_handlers
+        super(Engine, self).remove_event_handler(handler, event_name=event_name)
 
     def on(self, event_name, *args, **kwargs):
         """Decorator shortcut for add_event_handler.
@@ -391,36 +308,7 @@ class Engine(Serializable):
                 # do some thing not related to engine
                 pass
         """
-
-        def decorator(f: Callable) -> Callable:
-            self.add_event_handler(event_name, f, *args, **kwargs)
-            return f
-
-        return decorator
-
-    def _fire_event(self, event_name: Any, *event_args, **event_kwargs) -> None:
-        """Execute all the handlers associated with given event.
-
-        This method executes all handlers associated with the event
-        `event_name`. Optional positional and keyword arguments can be used to
-        pass arguments to **all** handlers added with this event. These
-        arguments updates arguments passed using :meth:`~ignite.engine.engine.Engine.add_event_handler`.
-
-        Args:
-            event_name: event for which the handlers should be executed. Valid
-                events are from :class:`~ignite.engine.events.Events` or any `event_name` added by
-                :meth:`~ignite.engine.engine.Engine.register_events`.
-            *event_args: optional args to be passed to all handlers.
-            **event_kwargs: optional keyword args to be passed to all handlers.
-
-        """
-        if event_name in self._allowed_events:
-            self.logger.debug("firing handlers for event %s ", event_name)
-            self.last_event_name = event_name
-            for func, args, kwargs in self._event_handlers[event_name]:
-                kwargs.update(event_kwargs)
-                first, others = ((args[0],), args[1:]) if (args and args[0] == self) else ((), args)
-                func(*first, *(event_args + others), **kwargs)
+        return super(Engine, self).on(event_name, *args, **kwargs)
 
     def fire_event(self, event_name: Any) -> None:
         """Execute all the handlers associated with given event.
@@ -443,7 +331,7 @@ class Engine(Serializable):
                 :meth:`~ignite.engine.engine.Engine.register_events`.
 
         """
-        return self._fire_event(event_name)
+        super(Engine, self)._fire_event(event_name)
 
     def terminate(self) -> None:
         """Sends terminate signal to the engine, so that it terminates completely the run after the current iteration.
@@ -730,6 +618,7 @@ class Engine(Serializable):
 
     def _internal_run(self) -> State:
         self.should_terminate = self.should_terminate_single_epoch = False
+        self._reset_allowed_events_counts()
         self._init_timers(self.state)
         try:
             start_time = time.time()
