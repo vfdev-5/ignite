@@ -62,6 +62,7 @@ def test_tiny_engine():
     class EventsDrivenState:
         def __init__(self, state: State, evd: EventsDriven):
             self._evd = evd
+            self._state = state
 
         @property
         def a(self):
@@ -87,11 +88,29 @@ def test_tiny_engine():
         def c(self, value):
             self._evd._allowed_events_counts[ABCEvents.C_EVENT] = value
 
-    class TinyEngine(EventsDriven):
+    class EventsDrivenWithState(EventsDriven):
+
+        def __init__(self):
+            super(EventsDrivenWithState, self).__init__()
+            self._state = None
+
+        def _setup_synced_state(self):
+            pass
+
+        @property
+        def state(self) -> State:
+            pass
+
+        @state.setter
+        def state(self, new_state: State):
+            pass
+
+    class TinyEngine(EventsDrivenWithState):
         def __init__(self):
             super(TinyEngine, self).__init__()
             self.register_events(*ABCEvents)
-            self.state = State(self)
+            #
+            self._setup_synced_state()
 
         def _check(self):
             assert self.state.a == self._allowed_events_counts[ABCEvents.A_EVENT]
