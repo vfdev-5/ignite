@@ -1,3 +1,5 @@
+from typing import List, Optional, Union, Mapping
+
 from ignite.base import EventsDriven, Serializable
 from ignite.engine.events import EventEnum
 
@@ -60,9 +62,13 @@ def test_tiny_engine():
             self.d = 0
 
     class EventsDrivenState:
-        def __init__(self, state: State, evd: EventsDriven):
+        def __init__(self, evd: EventsDriven):
             self._evd = evd
-            self._state = state
+            self._setup_properties()
+
+        def _setup_properties(self):
+            for ev in self._evd._allowed_events:
+                pass
 
         @property
         def a(self):
@@ -94,6 +100,12 @@ def test_tiny_engine():
             super(EventsDrivenWithState, self).__init__()
             self._state = None
 
+        def register_events(
+                self, *event_names: Union[List[str], List[EventEnum]], event_to_attr: Optional[Mapping] = None
+        ) -> None:
+            super(EventsDrivenWithState, self).register_events(*event_names, event_to_attr=event_to_attr)
+            self._setup_synced_state()
+
         def _setup_synced_state(self):
             pass
 
@@ -109,8 +121,6 @@ def test_tiny_engine():
         def __init__(self):
             super(TinyEngine, self).__init__()
             self.register_events(*ABCEvents)
-            #
-            self._setup_synced_state()
 
         def _check(self):
             assert self.state.a == self._allowed_events_counts[ABCEvents.A_EVENT]
