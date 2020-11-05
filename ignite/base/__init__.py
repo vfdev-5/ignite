@@ -1,1 +1,1 @@
-from ignite.base.mixins import EventsDriven, Serializable
+from ignite.base.mixins import EventsDriven, EventsDrivenState, EventsDrivenWithState, Serializable

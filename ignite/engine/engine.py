@@ -8,14 +8,15 @@ from typing import Any, Callable, Iterable, Iterator, List, Optional, Tuple, Uni
 from torch.utils.data import DataLoader
 
 from ignite._utils import _to_hours_mins_secs
-from ignite.base import EventsDriven, Serializable
-from ignite.engine.events import EventEnum, Events, State, RemovableEventHandle
+from ignite.base import EventsDrivenWithState, Serializable
+from ignite.engine.events import EventEnum, Events, RemovableEventHandle
+from ignite.engine.state import State
 from ignite.engine.utils import _check_signature
 
 __all__ = ["Engine"]
 
 
-class Engine(Serializable, EventsDriven):
+class Engine(Serializable, EventsDrivenWithState):
     """Runs a given ``process_function`` over each batch of a dataset, emitting events as it goes.
 
     Args:
@@ -125,7 +126,9 @@ class Engine(Serializable, EventsDriven):
         self._process_function = process_function
         self.should_terminate = False
         self.should_terminate_single_epoch = False
-        self.state = State()
+
+        # self.state is accessible via EventsDrivenWithState.state property
+        self._state = State(engine=self)
         self._state_dict_user_keys = []  # type: List[str]
 
         self._dataloader_iter = None  # type: Optional[Iterator[Any]]

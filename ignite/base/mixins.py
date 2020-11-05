@@ -2,8 +2,7 @@ import functools
 import logging
 import weakref
 from collections import OrderedDict, defaultdict
-from collections.abc import Mapping
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, List, Optional, Union, Mapping, Dict
 
 from ignite.engine.events import CallableEventWithFilter, EventEnum, Events, EventsList, RemovableEventHandle
 from ignite.engine.utils import _check_signature
@@ -223,3 +222,55 @@ class EventsDriven:
     def _reset_allowed_events_counts(self):
         for k in self._allowed_events_counts:
             self._allowed_events_counts[k] = 0
+
+
+class EventsDrivenState:
+
+    def __init__(
+        self, engine: Optional[EventsDriven] = None, event_to_attr: Optional[Mapping[Any, str]] = None, **kwargs: Any
+    ):
+        if event_to_attr is not None and engine is None:
+            raise ValueError("Both engine and event_to_attr should be provided, but only event_to_attr is given")
+
+        self.event_to_attr = event_to_attr  # type: Optional[Mapping[str, str]]
+        self.engine = engine  # type: Optional[EventsDriven]
+
+        self._attr_to_event = None
+        if event_to_attr is not None:
+            self._attr_to_event = {v: k for k, v in event_to_attr.items()}  # type: Optional[Dict[str, str]]
+
+    def __getattr__(self, attr):
+        if self._attr_to_event and attr in self._attr_to_event:
+            attr = self._attr_to_event[attr]
+
+        if self.engine and attr in self.engine._allowed_events_counts:
+            return self.engine._allowed_events_counts[attr]
+
+        raise AttributeError("'{}' object has no attribute '{}'".format(self.__class__.__name__, attr))
+
+    def __setattr__(self, attr, value):
+        if all([a in self.__dict__ for a in ["engine", "_attr_to_event"]]) and self.__dict__["engine"]:
+            self__attr_to_event = self.__dict__["_attr_to_event"]
+            if self__attr_to_event and attr in self__attr_to_event:
+                attr = self__attr_to_event[attr]
+            self_engine = self.__dict__["engine"]
+            if self_engine and attr in self_engine._allowed_events_counts:
+                self_engine._allowed_events_counts[attr] = value
+                return
+
+        super().__setattr__(attr, value)
+
+
+class EventsDrivenWithState(EventsDriven):
+
+    def __init__(self):
+        super(EventsDrivenWithState, self).__init__()
+        self._state = EventsDrivenState(self)
+
+    @property
+    def state(self) -> EventsDrivenState:
+        return self._state
+
+    @state.setter
+    def state(self, new_state: EventsDrivenState):
+        raise AttributeError("can't set attribute")

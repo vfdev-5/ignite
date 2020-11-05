@@ -1,6 +1,6 @@
 from typing import List, Optional, Union, Mapping
 
-from ignite.base import EventsDriven, Serializable
+from ignite.base import EventsDriven, EventsDrivenState, Serializable
 from ignite.engine.events import EventEnum
 
 
@@ -53,74 +53,24 @@ def test_events_driven_basics():
     assert e._allowed_events_counts[ABCEvents.C_EVENT] == 1
 
 
-def test_tiny_engine():
-    class State:
-        def __init__(self):
-            self.a = 0
-            self.b = 0
-            self.c = 0
-            self.d = 0
+def test_basic_events_driven_with_state():
 
-    class EventsDrivenState:
-        def __init__(self, evd: EventsDriven):
-            self._evd = evd
-            self._setup_properties()
+    class TinyEngine(EventsDriven):
 
-        def _setup_properties(self):
-            for ev in self._evd._allowed_events:
-                pass
-
-        @property
-        def a(self):
-            return self._evd._allowed_events_counts[ABCEvents.A_EVENT]
-
-        @property
-        def b(self):
-            return self._evd._allowed_events_counts[ABCEvents.B_EVENT]
-
-        @property
-        def c(self):
-            return self._evd._allowed_events_counts[ABCEvents.C_EVENT]
-
-        @a.setter
-        def a(self, value):
-            self._evd._allowed_events_counts[ABCEvents.A_EVENT] = value
-
-        @b.setter
-        def b(self, value):
-            self._evd._allowed_events_counts[ABCEvents.B_EVENT] = value
-
-        @c.setter
-        def c(self, value):
-            self._evd._allowed_events_counts[ABCEvents.C_EVENT] = value
-
-    class EventsDrivenWithState(EventsDriven):
-
-        def __init__(self):
-            super(EventsDrivenWithState, self).__init__()
-            self._state = None
-
-        def register_events(
-                self, *event_names: Union[List[str], List[EventEnum]], event_to_attr: Optional[Mapping] = None
-        ) -> None:
-            super(EventsDrivenWithState, self).register_events(*event_names, event_to_attr=event_to_attr)
-            self._setup_synced_state()
-
-        def _setup_synced_state(self):
-            pass
-
-        @property
-        def state(self) -> State:
-            pass
-
-        @state.setter
-        def state(self, new_state: State):
-            pass
-
-    class TinyEngine(EventsDrivenWithState):
         def __init__(self):
             super(TinyEngine, self).__init__()
             self.register_events(*ABCEvents)
+            self._state = EventsDrivenState(
+                engine=self, event_to_attr={
+                    ABCEvents.A_EVENT: "a",
+                    ABCEvents.B_EVENT: "b",
+                    ABCEvents.C_EVENT: "c",
+                }
+            )
+
+        @property
+        def state(self):
+            return self._state
 
         def _check(self):
             assert self.state.a == self._allowed_events_counts[ABCEvents.A_EVENT]
@@ -146,9 +96,112 @@ def test_tiny_engine():
     assert e.state.c == 20 * 10
 
     e.state.a = 0
-    e.state.b = 5
-    e.state.c = 0
+    e.state.b = 3
+    e.state.c = 4
+
+    assert e._allowed_events_counts[ABCEvents.A_EVENT] == 0
+    assert e._allowed_events_counts[ABCEvents.B_EVENT] == 3
+    assert e._allowed_events_counts[ABCEvents.C_EVENT] == 4
+
     e.run(10, 20, reset=False)
     assert e.state.a == 1
     assert e.state.b == 10
-    assert e.state.c == 20 * 5
+    assert e.state.c == 20 * (10 - 3)
+
+    # e.state = EventsDrivenState()
+    e.state.a = 3
+    e.state.b = 4
+    e.state.c = 5
+
+    assert e._allowed_events_counts[ABCEvents.A_EVENT] == 3
+    assert e._allowed_events_counts[ABCEvents.B_EVENT] == 4
+    assert e._allowed_events_counts[ABCEvents.C_EVENT] == 5
+
+    e.run(10, 20, reset=False)
+    assert e.state.a == 4
+    assert e.state.b == 10
+    assert e.state.c == 20 * (10 - 4)
+
+
+def test_events_driven_with_state_mixed_events():
+
+    class BCEvents(EventEnum):
+        B_EVENT_STARTED = "B_event_started"
+        B_EVENT_COMPLETED = "B_event_completed"
+        C_EVENT_STARTED = "C_event_started"
+        C_EVENT_COMPLETED = "C_event_completed"
+
+    class AnotherTinyEngine(EventsDriven):
+
+        def __init__(self):
+            super(AnotherTinyEngine, self).__init__()
+            self.register_events(*BCEvents)
+            self._state = EventsDrivenState(
+                engine=self, event_to_attr={
+                    BCEvents.B_EVENT_STARTED: "b",
+                    BCEvents.C_EVENT_STARTED: "c",
+                }
+            )
+
+        @property
+        def state(self):
+            return self._state
+
+        def _check(self):
+            assert self.state.b == self._allowed_events_counts[BCEvents.B_EVENT_STARTED]
+            assert self.state.c == self._allowed_events_counts[BCEvents.C_EVENT_STARTED]
+
+        def run(self, n, k, reset=True):
+            if reset:
+                self._reset_allowed_events_counts()
+            while self.state.b < n:
+                self.fire_event(BCEvents.B_EVENT_STARTED)
+                j = self.state.c % k
+                while j < k:
+                    j += 1
+                    self.fire_event(BCEvents.C_EVENT_STARTED)
+                    self._check()
+                    self.fire_event(BCEvents.C_EVENT_COMPLETED)
+                self.fire_event(BCEvents.B_EVENT_COMPLETED)
+
+    e = AnotherTinyEngine()
+
+    @e.on(BCEvents.B_EVENT_COMPLETED)
+    def check_b():
+        assert e.state.b == e._allowed_events_counts[BCEvents.B_EVENT_STARTED]
+
+    @e.on(BCEvents.C_EVENT_COMPLETED)
+    def check_c():
+        assert e.state.c == e._allowed_events_counts[BCEvents.C_EVENT_STARTED]
+
+    # class XYZEvents(EventEnum):
+    #     A_EVENT = "X_event"
+    #     B_EVENT = "Y_event"
+    #     C_EVENT = "Z_event"
+    #
+    # e.register_events(*XYZEvents)
+
+    e.run(10, 20)
+    assert e.state.b == 10
+    assert e.state.c == 20 * 10
+
+    # e.state.b = 3
+    # e.state.c = 4
+    #
+    # assert e._allowed_events_counts[BCEvents.B_EVENT_STARTED] == 3
+    # assert e._allowed_events_counts[BCEvents.C_EVENT_STARTED] == 4
+    #
+    # e.run(10, 20, reset=False)
+    # assert e.state.b == 10
+    # assert e.state.c == 20 * (10 - 3)
+    #
+    # # e.state = EventsDrivenState()
+    # e.state.b = 4
+    # e.state.c = 5
+    #
+    # assert e._allowed_events_counts[ABCEvents.B_EVENT] == 4
+    # assert e._allowed_events_counts[ABCEvents.C_EVENT] == 5
+    #
+    # e.run(10, 20, reset=False)
+    # assert e.state.b == 10
+    # assert e.state.c == 20 * (10 - 4)
