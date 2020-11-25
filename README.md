@@ -5,7 +5,7 @@
 <img src="assets/logo/ignite_logo_mixed.svg" width=512>
 
 
-<div align="left">
+<div align="left" style="padding-left: 25%;">
 
 <!-- [![image](https://travis-ci.com/pytorch/ignite.svg?branch=master)](https://travis-ci.com/pytorch/ignite) -->
 
