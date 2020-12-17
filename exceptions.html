@@ -32,10 +32,11 @@
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
   <link rel="stylesheet" href="_static/css/ignite_theme.css" type="text/css" />
+    <link rel="author" title="About these documents" href="about.html" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="ignite.contrib.engines" href="contrib/engines.html" />
-    <link rel="prev" title="ignite.metrics" href="metrics.html" /> 
+    <link rel="next" title="ignite.utils" href="utils.html" />
+    <link rel="prev" title="ignite.distributed" href="distributed.html" /> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -125,7 +126,7 @@
               
               
                 <div class="version">
-                  0.1.1.1
+                  0.4.3
                 </div>
               
             
@@ -155,21 +156,30 @@
             
               <p class="caption"><span class="caption-text">Notes</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts.html">Concepts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Package Reference</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="engine.html">ignite.engine</a></li>
 <li class="toctree-l1"><a class="reference internal" href="handlers.html">ignite.handlers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="metrics.html">ignite.metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">ignite.distributed</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">ignite.exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="utils.html">ignite.utils</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Contrib Package Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="contrib/engines.html">ignite.contrib.engines</a></li>
 <li class="toctree-l1"><a class="reference internal" href="contrib/metrics.html">ignite.contrib.metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contrib/handlers.html">ignite.contrib.handlers</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Team</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="about.html">About us</a></li>
+<li class="toctree-l1"><a class="reference internal" href="governance.html">PyTorch-Ignite governance</a></li>
 </ul>
 
             
@@ -180,7 +190,7 @@
       <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
     <span class="rst-current-version" data-toggle="rst-current-version">
         <span class="fa fa-book"> Other Versions</span>
-        v: v0.1.1.1
+        v: v0.4.3
         <span class="fa fa-caret-down"></span>
     </span>
     <div class="rst-other-versions">
@@ -192,6 +202,7 @@
             <dd><a href="v0.1.0.5/exceptions.html">v0.1.0.5</a></dd>
             <dd><a href="v0.1.1/exceptions.html">v0.1.1</a></dd>
             <dd><a href="v0.1.1.1/exceptions.html">v0.1.1.1</a></dd>
+            <dd><a href="v0.4.3/exceptions.html">v0.4.3</a></dd>
         </dl>
         <dl>
             <dt>Branches</dt>
@@ -268,6 +279,17 @@
               
   <div class="section" id="ignite-exceptions">
 <h1>ignite.exceptions<a class="headerlink" href="#ignite-exceptions" title="Permalink to this headline">¶</a></h1>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ignite.exceptions.NotComputableError" title="ignite.exceptions.NotComputableError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NotComputableError</span></code></a></p></td>
+<td><p>Exception class to raise if Metric cannot be computed.</p></td>
+</tr>
+</tbody>
+</table>
 <dl class="py class">
 <dt id="ignite.exceptions.NotComputableError">
 <em class="property">class </em><code class="sig-prename descclassname">ignite.exceptions.</code><code class="sig-name descname">NotComputableError</code><a class="reference internal" href="_modules/ignite/exceptions.html#NotComputableError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ignite.exceptions.NotComputableError" title="Permalink to this definition">¶</a></dt>
@@ -284,10 +306,10 @@
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="contrib/engines.html" class="btn btn-neutral float-right" title="ignite.contrib.engines" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="utils.html" class="btn btn-neutral float-right" title="ignite.utils" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="metrics.html" class="btn btn-neutral" title="ignite.metrics" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="distributed.html" class="btn btn-neutral" title="ignite.distributed" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -336,6 +358,7 @@
          <script src="_static/underscore.js"></script>
          <script src="_static/doctools.js"></script>
          <script src="_static/language_data.js"></script>
+         <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
      
 
   

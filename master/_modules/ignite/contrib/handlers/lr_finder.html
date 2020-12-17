@@ -200,6 +200,7 @@
             <dd><a href="../../../../../v0.1.0.5/index.html">v0.1.0.5</a></dd>
             <dd><a href="../../../../../v0.1.1/index.html">v0.1.1</a></dd>
             <dd><a href="../../../../../v0.1.1.1/index.html">v0.1.1.1</a></dd>
+            <dd><a href="../../../../../v0.4.3/index.html">v0.4.3</a></dd>
         </dl>
         <dl>
             <dt>Branches</dt>
@@ -279,7 +280,7 @@
 <span class="kn">import</span> <span class="nn">tempfile</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">torch.optim</span> <span class="kn">import</span> <span class="n">Optimizer</span>
@@ -346,11 +347,11 @@
 <span class="sd">        fastai/lr_find: https://github.com/fastai/fastai</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_diverge_flag</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_history</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_history</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># type: Dict[str, List[Any]]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_best_loss</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedule</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedule</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># type: Optional[Union[LRScheduler, PiecewiseLinear]]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span>
@@ -363,7 +364,7 @@
         <span class="n">step_mode</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">smooth_f</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">diverge_th</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="p">):</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_history</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;loss&quot;</span><span class="p">:</span> <span class="p">[]}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_best_loss</span> <span class="o">=</span> <span class="kc">None</span>
@@ -373,7 +374,7 @@
         <span class="k">if</span> <span class="n">num_iter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">num_iter</span> <span class="o">=</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">epoch_length</span> <span class="o">*</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">max_epochs</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">max_iter</span> <span class="o">=</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">epoch_length</span> <span class="o">*</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">max_epochs</span>
+            <span class="n">max_iter</span> <span class="o">=</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">epoch_length</span> <span class="o">*</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">max_epochs</span>  <span class="c1"># type: ignore[operator]</span>
             <span class="k">if</span> <span class="n">num_iter</span> <span class="o">&gt;</span> <span class="n">max_iter</span><span class="p">:</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                     <span class="s2">&quot;Desired num_iter </span><span class="si">{}</span><span class="s2"> is unreachable with the current run setup of </span><span class="si">{}</span><span class="s2"> iteration &quot;</span>
@@ -402,16 +403,16 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">trainer</span><span class="o">.</span><span class="n">has_event_handler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedule</span><span class="p">):</span>
             <span class="n">trainer</span><span class="o">.</span><span class="n">add_event_handler</span><span class="p">(</span><span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedule</span><span class="p">,</span> <span class="n">num_iter</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Engine</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Engine</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Completed LR finder run&quot;</span><span class="p">)</span>
-        <span class="n">trainer</span><span class="o">.</span><span class="n">remove_event_handler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedule</span><span class="p">,</span> <span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">)</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">remove_event_handler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedule</span><span class="p">,</span> <span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
         <span class="n">trainer</span><span class="o">.</span><span class="n">remove_event_handler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_lr_and_loss</span><span class="p">,</span> <span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">)</span>
         <span class="n">trainer</span><span class="o">.</span><span class="n">remove_event_handler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_reached_num_iterations</span><span class="p">,</span> <span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_log_lr_and_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">output_transform</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">smooth_f</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">diverge_th</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_log_lr_and_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">output_transform</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">smooth_f</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">diverge_th</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">output</span> <span class="o">=</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">output</span>
         <span class="n">loss</span> <span class="o">=</span> <span class="n">output_transform</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
-        <span class="n">lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedule</span><span class="o">.</span><span class="n">get_param</span><span class="p">()</span>
+        <span class="n">lr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lr_schedule</span><span class="o">.</span><span class="n">get_param</span><span class="p">()</span>  <span class="c1"># type: ignore[union-attr]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_history</span><span class="p">[</span><span class="s2">&quot;lr&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">lr</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">iteration</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_best_loss</span> <span class="o">=</span> <span class="n">loss</span>
@@ -423,16 +424,16 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_history</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">loss</span><span class="p">)</span>
 
         <span class="c1"># Check if the loss has diverged; if it has, stop the trainer</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">diverge_th</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_best_loss</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">diverge_th</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_best_loss</span><span class="p">:</span>  <span class="c1"># type: ignore[operator]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_diverge_flag</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stopping early, the loss has diverged&quot;</span><span class="p">)</span>
             <span class="n">trainer</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_reached_num_iterations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">num_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_reached_num_iterations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">num_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">trainer</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">iteration</span> <span class="o">&gt;</span> <span class="n">num_iter</span><span class="p">:</span>
             <span class="n">trainer</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_warning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_warning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_diverge_flag</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="s2">&quot;Run completed without loss diverging, increase end_lr, decrease diverge_th or look&quot;</span>
@@ -440,7 +441,7 @@
                 <span class="ne">UserWarning</span><span class="p">,</span>
             <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_detach</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Engine</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_detach</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trainer</span><span class="p">:</span> <span class="n">Engine</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Detaches lr_finder from trainer.</span>
 
@@ -455,13 +456,13 @@
         <span class="k">if</span> <span class="n">trainer</span><span class="o">.</span><span class="n">has_event_handler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_reset</span><span class="p">,</span> <span class="n">Events</span><span class="o">.</span><span class="n">COMPLETED</span><span class="p">):</span>
             <span class="n">trainer</span><span class="o">.</span><span class="n">remove_event_handler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_reset</span><span class="p">,</span> <span class="n">Events</span><span class="o">.</span><span class="n">COMPLETED</span><span class="p">)</span>
 
-<div class="viewcode-block" id="FastaiLRFinder.get_results"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.lr_finder.FastaiLRFinder.get_results">[docs]</a>    <span class="k">def</span> <span class="nf">get_results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="FastaiLRFinder.get_results"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.lr_finder.FastaiLRFinder.get_results">[docs]</a>    <span class="k">def</span> <span class="nf">get_results</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns: dictionary with loss and lr logs fromm the previous run</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history</span></div>
 
-<div class="viewcode-block" id="FastaiLRFinder.plot"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.lr_finder.FastaiLRFinder.plot">[docs]</a>    <span class="k">def</span> <span class="nf">plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">skip_start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">skip_end</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">log_lr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="FastaiLRFinder.plot"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.lr_finder.FastaiLRFinder.plot">[docs]</a>    <span class="k">def</span> <span class="nf">plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">skip_start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">skip_end</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">log_lr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Plots the learning rate range test.</span>
 
 <span class="sd">        This method requires `matplotlib` package to be installed:</span>
@@ -486,7 +487,7 @@
                 <span class="s2">&quot;Please install it with command: </span><span class="se">\n</span><span class="s2"> pip install matplotlib&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;learning rate finder didn&#39;t run yet so results can&#39;t be plotted&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">skip_start</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -514,11 +515,11 @@
         <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;Loss&quot;</span><span class="p">)</span>
         <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="FastaiLRFinder.lr_suggestion"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.lr_finder.FastaiLRFinder.lr_suggestion">[docs]</a>    <span class="k">def</span> <span class="nf">lr_suggestion</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="FastaiLRFinder.lr_suggestion"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.lr_finder.FastaiLRFinder.lr_suggestion">[docs]</a>    <span class="k">def</span> <span class="nf">lr_suggestion</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns: learning rate at the minimum numerical gradient</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;learning rate finder didn&#39;t run yet so lr_suggestion can&#39;t be returned&quot;</span><span class="p">)</span>
         <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_history</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span>
         <span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">loss</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">loss</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">loss</span><span class="p">))])</span>
@@ -536,7 +537,7 @@
         <span class="n">step_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;exp&quot;</span><span class="p">,</span>
         <span class="n">smooth_f</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
         <span class="n">diverge_th</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
-    <span class="p">):</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Attaches lr_finder to a given trainer. It also resets model and optimizer at the end of the run.</span>
 
 <span class="sd">        Usage:</span>
@@ -647,15 +648,15 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">optimizer</span><span class="p">:</span> <span class="n">Optimizer</span><span class="p">,</span> <span class="n">end_lr</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">num_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">last_epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">optimizer</span><span class="p">:</span> <span class="n">Optimizer</span><span class="p">,</span> <span class="n">end_lr</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">num_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">last_epoch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">end_lr</span> <span class="o">=</span> <span class="n">end_lr</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_iter</span> <span class="o">=</span> <span class="n">num_iter</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_ExponentialLR</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">last_epoch</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">get_lr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">curr_iter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_epoch</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="k">def</span> <span class="nf">get_lr</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>  <span class="c1"># type: ignore</span>
+        <span class="n">curr_iter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_epoch</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># type: ignore[attr-defined]</span>
         <span class="n">r</span> <span class="o">=</span> <span class="n">curr_iter</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_iter</span>
-        <span class="k">return</span> <span class="p">[</span><span class="n">base_lr</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">end_lr</span> <span class="o">/</span> <span class="n">base_lr</span><span class="p">)</span> <span class="o">**</span> <span class="n">r</span> <span class="k">for</span> <span class="n">base_lr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_lrs</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">base_lr</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">end_lr</span> <span class="o">/</span> <span class="n">base_lr</span><span class="p">)</span> <span class="o">**</span> <span class="n">r</span> <span class="k">for</span> <span class="n">base_lr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_lrs</span><span class="p">]</span>  <span class="c1"># type: ignore[attr-defined]</span>
 </pre></div>
 
              </article>

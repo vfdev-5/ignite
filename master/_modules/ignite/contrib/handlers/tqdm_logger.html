@@ -200,6 +200,7 @@
             <dd><a href="../../../../../v0.1.0.5/index.html">v0.1.0.5</a></dd>
             <dd><a href="../../../../../v0.1.1/index.html">v0.1.1</a></dd>
             <dd><a href="../../../../../v0.1.1.1/index.html">v0.1.1.1</a></dd>
+            <dd><a href="../../../../../v0.4.3/index.html">v0.4.3</a></dd>
         </dl>
         <dl>
             <dt>Branches</dt>
@@ -275,14 +276,13 @@
   <h1>Source code for ignite.contrib.handlers.tqdm_logger</h1><div class="highlight"><pre>
 <span></span><span class="c1"># -*- coding: utf-8 -*-</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 
 <span class="kn">from</span> <span class="nn">ignite.contrib.handlers.base_logger</span> <span class="kn">import</span> <span class="n">BaseLogger</span><span class="p">,</span> <span class="n">BaseOutputHandler</span>
 <span class="kn">from</span> <span class="nn">ignite.engine</span> <span class="kn">import</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">Events</span>
-<span class="kn">from</span> <span class="nn">ignite.engine.events</span> <span class="kn">import</span> <span class="n">CallableEventWithFilter</span><span class="p">,</span> <span class="n">EventEnum</span>
+<span class="kn">from</span> <span class="nn">ignite.engine.events</span> <span class="kn">import</span> <span class="n">CallableEventWithFilter</span><span class="p">,</span> <span class="n">RemovableEventHandle</span>
 
 
 <div class="viewcode-block" id="ProgressBar"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.tqdm_logger.ProgressBar">[docs]</a><span class="k">class</span> <span class="nc">ProgressBar</span><span class="p">(</span><span class="n">BaseLogger</span><span class="p">):</span>
@@ -374,14 +374,14 @@
         <span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">,</span>
         <span class="n">Events</span><span class="o">.</span><span class="n">EPOCH_COMPLETED</span><span class="p">,</span>
         <span class="n">Events</span><span class="o">.</span><span class="n">COMPLETED</span><span class="p">,</span>
-    <span class="p">]</span>
+    <span class="p">]</span>  <span class="c1"># type: List[Union[Events, CallableEventWithFilter]]</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">persist</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">bar_format</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{desc}</span><span class="s2">[</span><span class="si">{n_fmt}</span><span class="s2">/</span><span class="si">{total_fmt}</span><span class="s2">] </span><span class="si">{percentage:3.0f}</span><span class="s2">%|</span><span class="si">{bar}{postfix}</span><span class="s2"> [</span><span class="si">{elapsed}</span><span class="s2">&lt;</span><span class="si">{remaining}</span><span class="s2">]&quot;</span><span class="p">,</span>
         <span class="o">**</span><span class="n">tqdm_kwargs</span><span class="p">:</span> <span class="n">Any</span>
-    <span class="p">):</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">tqdm.autonotebook</span> <span class="kn">import</span> <span class="n">tqdm</span>
@@ -397,12 +397,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">bar_format</span> <span class="o">=</span> <span class="n">bar_format</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tqdm_kwargs</span> <span class="o">=</span> <span class="n">tqdm_kwargs</span>
 
-    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pbar_total</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pbar_total</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pbar</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbar_cls</span><span class="p">(</span>
             <span class="n">total</span><span class="o">=</span><span class="n">pbar_total</span><span class="p">,</span> <span class="n">leave</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">persist</span><span class="p">,</span> <span class="n">bar_format</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">bar_format</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">tqdm_kwargs</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_close</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_close</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbar</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># https://github.com/tqdm/notebook.py#L240-L250</span>
             <span class="c1"># issue #1115 : notebook backend of tqdm checks if n &lt; total (error or KeyboardInterrupt)</span>
@@ -413,12 +413,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">pbar</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_compare_lt</span><span class="p">(</span><span class="n">event1</span><span class="p">:</span> <span class="n">EventEnum</span><span class="p">,</span> <span class="n">event2</span><span class="p">:</span> <span class="n">EventEnum</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_compare_lt</span><span class="p">(</span>
+        <span class="n">event1</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Events</span><span class="p">,</span> <span class="n">CallableEventWithFilter</span><span class="p">],</span> <span class="n">event2</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Events</span><span class="p">,</span> <span class="n">CallableEventWithFilter</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="n">i1</span> <span class="o">=</span> <span class="n">ProgressBar</span><span class="o">.</span><span class="n">_events_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">event1</span><span class="p">)</span>
         <span class="n">i2</span> <span class="o">=</span> <span class="n">ProgressBar</span><span class="o">.</span><span class="n">_events_order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">event2</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">i1</span> <span class="o">&lt;</span> <span class="n">i2</span>
 
-<div class="viewcode-block" id="ProgressBar.log_message"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.tqdm_logger.ProgressBar.log_message">[docs]</a>    <span class="k">def</span> <span class="nf">log_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<div class="viewcode-block" id="ProgressBar.log_message"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.tqdm_logger.ProgressBar.log_message">[docs]</a>    <span class="k">def</span> <span class="nf">log_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Logs a message, preserving the progress bar correct output format.</span>
 
@@ -429,14 +431,14 @@
 
         <span class="n">tqdm</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tqdm_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;file&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span></div>
 
-<div class="viewcode-block" id="ProgressBar.attach"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.tqdm_logger.ProgressBar.attach">[docs]</a>    <span class="k">def</span> <span class="nf">attach</span><span class="p">(</span>
+<div class="viewcode-block" id="ProgressBar.attach"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.tqdm_logger.ProgressBar.attach">[docs]</a>    <span class="k">def</span> <span class="nf">attach</span><span class="p">(</span>  <span class="c1"># type: ignore[override]</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span>
         <span class="n">metric_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">output_transform</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">CallableEventWithFilter</span><span class="p">,</span> <span class="n">Events</span><span class="p">]</span> <span class="o">=</span> <span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">,</span>
-        <span class="n">closing_event_name</span><span class="p">:</span> <span class="n">Events</span> <span class="o">=</span> <span class="n">Events</span><span class="o">.</span><span class="n">EPOCH_COMPLETED</span><span class="p">,</span>
-    <span class="p">):</span>
+        <span class="n">event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Events</span><span class="p">,</span> <span class="n">CallableEventWithFilter</span><span class="p">]</span> <span class="o">=</span> <span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">,</span>
+        <span class="n">closing_event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Events</span><span class="p">,</span> <span class="n">CallableEventWithFilter</span><span class="p">]</span> <span class="o">=</span> <span class="n">Events</span><span class="o">.</span><span class="n">EPOCH_COMPLETED</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Attaches the progress bar to an engine object.</span>
 
@@ -475,14 +477,16 @@
         <span class="nb">super</span><span class="p">(</span><span class="n">ProgressBar</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">log_handler</span><span class="p">,</span> <span class="n">event_name</span><span class="p">)</span>
         <span class="n">engine</span><span class="o">.</span><span class="n">add_event_handler</span><span class="p">(</span><span class="n">closing_event_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_close</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ProgressBar.attach_opt_params_handler"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.tqdm_logger.ProgressBar.attach_opt_params_handler">[docs]</a>    <span class="k">def</span> <span class="nf">attach_opt_params_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">EventEnum</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+<div class="viewcode-block" id="ProgressBar.attach_opt_params_handler"><a class="viewcode-back" href="../../../../contrib/handlers.html#ignite.contrib.handlers.tqdm_logger.ProgressBar.attach_opt_params_handler">[docs]</a>    <span class="k">def</span> <span class="nf">attach_opt_params_handler</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Events</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableEventHandle</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Intentionally empty&quot;&quot;&quot;</span>
         <span class="k">pass</span></div>
 
-    <span class="k">def</span> <span class="nf">_create_output_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_create_output_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;_OutputHandler&quot;</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_OutputHandler</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_create_opt_params_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_create_opt_params_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Intentionally empty&quot;&quot;&quot;</span>
         <span class="k">pass</span></div>
 
@@ -507,10 +511,10 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">metric_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">metric_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">output_transform</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">closing_event_name</span><span class="p">:</span> <span class="n">EventEnum</span> <span class="o">=</span> <span class="n">Events</span><span class="o">.</span><span class="n">EPOCH_COMPLETED</span><span class="p">,</span>
-    <span class="p">):</span>
+        <span class="n">closing_event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Events</span><span class="p">,</span> <span class="n">CallableEventWithFilter</span><span class="p">]</span> <span class="o">=</span> <span class="n">Events</span><span class="o">.</span><span class="n">EPOCH_COMPLETED</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">metric_names</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">output_transform</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># This helps to avoid &#39;Either metric_names or output_transform should be defined&#39; of BaseOutputHandler</span>
             <span class="n">metric_names</span> <span class="o">=</span> <span class="p">[]</span>
@@ -518,14 +522,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">closing_event_name</span> <span class="o">=</span> <span class="n">closing_event_name</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">get_max_number_events</span><span class="p">(</span><span class="n">event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">CallableEventWithFilter</span><span class="p">,</span> <span class="n">Enum</span><span class="p">],</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">get_max_number_events</span><span class="p">(</span><span class="n">event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Events</span><span class="p">,</span> <span class="n">CallableEventWithFilter</span><span class="p">],</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
         <span class="k">if</span> <span class="n">event_name</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_STARTED</span><span class="p">,</span> <span class="n">Events</span><span class="o">.</span><span class="n">ITERATION_COMPLETED</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">engine</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">epoch_length</span>
         <span class="k">if</span> <span class="n">event_name</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Events</span><span class="o">.</span><span class="n">EPOCH_STARTED</span><span class="p">,</span> <span class="n">Events</span><span class="o">.</span><span class="n">EPOCH_COMPLETED</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">engine</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">max_epochs</span>
         <span class="k">return</span> <span class="mi">1</span>
 
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">ProgressBar</span><span class="p">,</span> <span class="n">event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">CallableEventWithFilter</span><span class="p">,</span> <span class="n">Enum</span><span class="p">]):</span>
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">ProgressBar</span><span class="p">,</span> <span class="n">event_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Events</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="n">pbar_total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_max_number_events</span><span class="p">(</span><span class="n">event_name</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -536,10 +540,10 @@
 
         <span class="n">desc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tag</span> <span class="ow">or</span> <span class="n">default_desc</span>
         <span class="n">max_num_of_closing_events</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_max_number_events</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">closing_event_name</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">max_num_of_closing_events</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">max_num_of_closing_events</span> <span class="ow">and</span> <span class="n">max_num_of_closing_events</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">global_step</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_event_attrib_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">closing_event_name</span><span class="p">)</span>
             <span class="n">desc</span> <span class="o">+=</span> <span class="s2">&quot; [</span><span class="si">{}</span><span class="s2">/</span><span class="si">{}</span><span class="s2">]&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">global_step</span><span class="p">,</span> <span class="n">max_num_of_closing_events</span><span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span><span class="n">desc</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span><span class="n">desc</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
         <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_output_metrics</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
 
@@ -558,12 +562,12 @@
                 <span class="n">rendered_metrics</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
         <span class="k">if</span> <span class="n">rendered_metrics</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span><span class="o">.</span><span class="n">set_postfix</span><span class="p">(</span><span class="o">**</span><span class="n">rendered_metrics</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span><span class="o">.</span><span class="n">set_postfix</span><span class="p">(</span><span class="o">**</span><span class="n">rendered_metrics</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
         <span class="n">global_step</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_event_attrib_value</span><span class="p">(</span><span class="n">event_name</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">pbar_total</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">global_step</span> <span class="o">=</span> <span class="p">(</span><span class="n">global_step</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">pbar_total</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">global_step</span> <span class="o">-</span> <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span><span class="o">.</span><span class="n">n</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">global_step</span> <span class="o">-</span> <span class="n">logger</span><span class="o">.</span><span class="n">pbar</span><span class="o">.</span><span class="n">n</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
 </pre></div>
 
              </article>

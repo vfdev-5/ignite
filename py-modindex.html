@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
   <link rel="stylesheet" href="_static/css/ignite_theme.css" type="text/css" />
+    <link rel="author" title="About these documents" href="about.html" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
  
@@ -126,7 +127,7 @@
               
               
                 <div class="version">
-                  0.1.1.1
+                  0.4.3
                 </div>
               
             
@@ -156,21 +157,30 @@
             
               <p class="caption"><span class="caption-text">Notes</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts.html">Concepts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Package Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="engine.html">ignite.engine</a></li>
 <li class="toctree-l1"><a class="reference internal" href="handlers.html">ignite.handlers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="metrics.html">ignite.metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">ignite.distributed</a></li>
 <li class="toctree-l1"><a class="reference internal" href="exceptions.html">ignite.exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="utils.html">ignite.utils</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Contrib Package Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="contrib/engines.html">ignite.contrib.engines</a></li>
 <li class="toctree-l1"><a class="reference internal" href="contrib/metrics.html">ignite.contrib.metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contrib/handlers.html">ignite.contrib.handlers</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Team</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="about.html">About us</a></li>
+<li class="toctree-l1"><a class="reference internal" href="governance.html">PyTorch-Ignite governance</a></li>
 </ul>
 
             
@@ -181,7 +191,7 @@
       <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
     <span class="rst-current-version" data-toggle="rst-current-version">
         <span class="fa fa-book"> Other Versions</span>
-        v: v0.1.1.1
+        v: v0.4.3
         <span class="fa fa-caret-down"></span>
     </span>
     <div class="rst-other-versions">
@@ -192,7 +202,8 @@
             <dd><a href="v0.1.0.4/index.html">v0.1.0.4</a></dd>
             <dd><a href="v0.1.0.5/index.html">v0.1.0.5</a></dd>
             <dd><a href="v0.1.1/index.html">v0.1.1</a></dd>
-            <dd><a href="v0.1.1.1/py-modindex.html">v0.1.1.1</a></dd>
+            <dd><a href="v0.1.1.1/index.html">v0.1.1.1</a></dd>
+            <dd><a href="v0.4.3/py-modindex.html">v0.4.3</a></dd>
         </dl>
         <dl>
             <dt>Branches</dt>
@@ -283,12 +294,107 @@
      <tr class="cg-1">
        <td></td>
        <td>&#160;&#160;&#160;
-       <a href="contrib/engines.html#module-ignite.contrib.engines"><code class="xref">ignite.contrib.engines</code></a></td><td>
+       <a href="index.html#module-ignite.contrib"><code class="xref">ignite.contrib</code></a></td><td>
        <em></em></td></tr>
      <tr class="cg-1">
        <td></td>
        <td>&#160;&#160;&#160;
-       <a href="engine.html#module-ignite.engine"><code class="xref">ignite.engine</code></a></td><td>
+       <a href="contrib/engines.html#module-ignite.contrib.engines.common"><code class="xref">ignite.contrib.engines.common</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/engines.html#module-ignite.contrib.engines.tbptt"><code class="xref">ignite.contrib.engines.tbptt</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.lr_finder"><code class="xref">ignite.contrib.handlers.lr_finder</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.mlflow_logger"><code class="xref">ignite.contrib.handlers.mlflow_logger</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.neptune_logger"><code class="xref">ignite.contrib.handlers.neptune_logger</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.param_scheduler"><code class="xref">ignite.contrib.handlers.param_scheduler</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.polyaxon_logger"><code class="xref">ignite.contrib.handlers.polyaxon_logger</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.tensorboard_logger"><code class="xref">ignite.contrib.handlers.tensorboard_logger</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.time_profilers"><code class="xref">ignite.contrib.handlers.time_profilers</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.tqdm_logger"><code class="xref">ignite.contrib.handlers.tqdm_logger</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.trains_logger"><code class="xref">ignite.contrib.handlers.trains_logger</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.visdom_logger"><code class="xref">ignite.contrib.handlers.visdom_logger</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/handlers.html#module-ignite.contrib.handlers.wandb_logger"><code class="xref">ignite.contrib.handlers.wandb_logger</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/metrics.html#module-ignite.contrib.metrics"><code class="xref">ignite.contrib.metrics</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="contrib/metrics.html#module-ignite.contrib.metrics.regression"><code class="xref">ignite.contrib.metrics.regression</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="distributed.html#module-ignite.distributed.auto"><code class="xref">ignite.distributed.auto</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="distributed.html#module-ignite.distributed.launcher"><code class="xref">ignite.distributed.launcher</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="distributed.html#module-ignite.distributed.utils"><code class="xref">ignite.distributed.utils</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="engine.html#module-ignite.engine.deterministic"><code class="xref">ignite.engine.deterministic</code></a></td><td>
+       <em></em></td></tr>
+     <tr class="cg-1">
+       <td></td>
+       <td>&#160;&#160;&#160;
+       <a href="utils.html#module-ignite.utils"><code class="xref">ignite.utils</code></a></td><td>
        <em></em></td></tr>
    </table>
 
@@ -340,6 +446,7 @@
          <script src="_static/underscore.js"></script>
          <script src="_static/doctools.js"></script>
          <script src="_static/language_data.js"></script>
+         <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
      
 
   

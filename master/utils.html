@@ -202,6 +202,7 @@
             <dd><a href="../v0.1.0.5/index.html">v0.1.0.5</a></dd>
             <dd><a href="../v0.1.1/index.html">v0.1.1</a></dd>
             <dd><a href="../v0.1.1.1/index.html">v0.1.1.1</a></dd>
+            <dd><a href="../v0.4.3/utils.html">v0.4.3</a></dd>
         </dl>
         <dl>
             <dt>Branches</dt>
@@ -295,7 +296,7 @@
 <td><p>Apply a function on a object of <cite>input_type</cite> or mapping, or sequence of objects of <cite>input_type</cite>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#ignite.utils.to_onehot" title="ignite.utils.to_onehot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_onehot</span></code></a></p></td>
-<td><p>Convert a tensor of indices of any shape <cite>(N, …)</cite> to a tensor of one-hot indicators of shape <cite>(N, num_classes, …) and of type uint8.Output’s device is equal to the input’s device</cite>..</p></td>
+<td><p>Convert a tensor of indices of any shape <cite>(N, …)</cite> to a tensor of one-hot indicators of shape <a href="#id1"><span class="problematic" id="id2">`</span></a>(N, num_classes, …) and of type uint8.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#ignite.utils.setup_logger" title="ignite.utils.setup_logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup_logger</span></code></a></p></td>
 <td><p>Setups logger: name, level, format etc.</p></td>
@@ -345,8 +346,8 @@
 <li><p><strong>level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a>) – logging level, e.g. CRITICAL, ERROR, WARNING, INFO, DEBUG</p></li>
 <li><p><strong>format</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.9)"><em>str</em></a>) – logging format. By default, <cite>%(asctime)s %(name)s %(levelname)s: %(message)s</cite></p></li>
 <li><p><strong>filepath</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.9)"><em>str</em></a><em>, </em><em>optional</em>) – Optional logging file path. If not None, logs are written to the file.</p></li>
-<li><p><strong>distributed_rank</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a><em>, </em><em>optional</em>) – Optional, rank in distributed configuration to avoid logger setup for workers.</p></li>
-<li><p><strong>None</strong><strong>, </strong><strong>distributed_rank is initialized to the rank of process.</strong> (<em>If</em>) – </p></li>
+<li><p><strong>distributed_rank</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.9)"><em>int</em></a><em>, </em><em>optional</em>) – Optional, rank in distributed configuration to avoid logger setup for workers.
+If None, distributed_rank is initialized to the rank of process.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>

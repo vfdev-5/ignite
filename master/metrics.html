@@ -202,6 +202,7 @@
             <dd><a href="../v0.1.0.5/metrics.html">v0.1.0.5</a></dd>
             <dd><a href="../v0.1.1/metrics.html">v0.1.1</a></dd>
             <dd><a href="../v0.1.1.1/metrics.html">v0.1.1.1</a></dd>
+            <dd><a href="../v0.4.3/metrics.html">v0.4.3</a></dd>
         </dl>
         <dl>
             <dt>Branches</dt>
@@ -332,7 +333,7 @@ use the <code class="docutils literal notranslate"><span class="pre">output_tran
 <p>Most of implemented metrics are adapted to distributed computations and reduce their internal states across supported
 devices before computing metric value. This can be helpful to run the evaluation on multiple nodes/GPU instances/TPUs
 with a distributed data sampler. Following code snippet shows in detail how to use metrics:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">local_rank</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">device</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;cuda:</span><span class="si">{</span><span class="n">local_rank</span><span class="si">}</span><span class="s2">&quot;</span>
 <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">parallel</span><span class="o">.</span><span class="n">DistributedDataParallel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span>
                                                   <span class="n">device_ids</span><span class="o">=</span><span class="p">[</span><span class="n">local_rank</span><span class="p">,</span> <span class="p">],</span>
                                                   <span class="n">output_device</span><span class="o">=</span><span class="n">local_rank</span><span class="p">)</span>
@@ -943,10 +944,15 @@ non-blocking. By default, CPU.</p></li>
 </dl>
 <dl class="py attribute">
 <dt id="ignite.metrics.Metric.required_output_keys">
-<code class="sig-name descname">required_output_keys</code><em class="property">: tuple</em><a class="headerlink" href="#ignite.metrics.Metric.required_output_keys" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">required_output_keys</code><a class="headerlink" href="#ignite.metrics.Metric.required_output_keys" title="Permalink to this definition">¶</a></dt>
 <dd><p>dictionary defines required keys to be found in <code class="docutils literal notranslate"><span class="pre">engine.state.output</span></code> if the
 latter is a dictionary. Default, <code class="docutils literal notranslate"><span class="pre">(&quot;y_pred&quot;,</span> <span class="pre">&quot;y&quot;)</span></code>. This is useful with custom metrics that can require
 other arguments than predictions <code class="docutils literal notranslate"><span class="pre">y_pred</span></code> and targets <code class="docutils literal notranslate"><span class="pre">y</span></code>. See notes below for an example.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.9)">tuple</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 <div class="admonition note">
@@ -1041,7 +1047,10 @@ contain computed metric’s value under provided name.</p>
 <cite>engine</cite> with <a class="reference internal" href="#ignite.metrics.Metric.attach" title="ignite.metrics.Metric.attach"><code class="xref py py-meth docutils literal notranslate"><span class="pre">attach()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>engine</strong> (<a class="reference internal" href="engine.html#ignite.engine.engine.Engine" title="ignite.engine.engine.Engine"><em>Engine</em></a>) – the engine to which the metric must be attached</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>engine</strong> (<a class="reference internal" href="engine.html#ignite.engine.engine.Engine" title="ignite.engine.engine.Engine"><em>Engine</em></a>) – the engine to which the metric must be attached</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.9)"><em>str</em></a>) – the name of the metric used as key in dict <cite>engine.state.metrics</cite></p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -1125,7 +1134,7 @@ value is written to <cite>engine.state.metrics</cite> dictionary.</p>
 
 <dl class="py method">
 <dt id="ignite.metrics.Metric.iteration_completed">
-<code class="sig-name descname">iteration_completed</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="_modules/ignite/metrics/metric.html#Metric.iteration_completed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ignite.metrics.Metric.iteration_completed" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">iteration_completed</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">engine</span><span class="p">:</span> <span class="n">ignite.engine.engine.Engine</span></em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="_modules/ignite/metrics/metric.html#Metric.iteration_completed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#ignite.metrics.Metric.iteration_completed" title="Permalink to this definition">¶</a></dt>
 <dd><p>Helper method to update metric’s computation. It is automatically attached to the
 <cite>engine</cite> with <a class="reference internal" href="#ignite.metrics.Metric.attach" title="ignite.metrics.Metric.attach"><code class="xref py py-meth docutils literal notranslate"><span class="pre">attach()</span></code></a>.</p>
 <dl class="field-list simple">
@@ -1492,8 +1501,13 @@ Valid events are from <a class="reference internal" href="engine.html#ignite.eng
 </ul>
 <dl class="py attribute">
 <dt id="ignite.metrics.EpochWise.usage_name">
-<code class="sig-name descname">usage_name</code><em class="property">: str</em><a class="headerlink" href="#ignite.metrics.EpochWise.usage_name" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">usage_name</code><a class="headerlink" href="#ignite.metrics.EpochWise.usage_name" title="Permalink to this definition">¶</a></dt>
 <dd><p>usage name string</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.9)">str</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -1510,8 +1524,13 @@ Valid events are from <a class="reference internal" href="engine.html#ignite.eng
 </ul>
 <dl class="py attribute">
 <dt id="ignite.metrics.BatchWise.usage_name">
-<code class="sig-name descname">usage_name</code><em class="property">: str</em><a class="headerlink" href="#ignite.metrics.BatchWise.usage_name" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">usage_name</code><a class="headerlink" href="#ignite.metrics.BatchWise.usage_name" title="Permalink to this definition">¶</a></dt>
 <dd><p>usage name string</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.9)">str</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>

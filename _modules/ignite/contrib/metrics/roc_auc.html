@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
   <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
   <link rel="stylesheet" href="../../../../_static/css/ignite_theme.css" type="text/css" />
+    <link rel="author" title="About these documents" href="../../../../about.html" />
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
 
@@ -123,7 +124,7 @@
               
               
                 <div class="version">
-                  0.1.1.1
+                  0.4.3
                 </div>
               
             
@@ -153,21 +154,30 @@
             
               <p class="caption"><span class="caption-text">Notes</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../quickstart.html">Quick start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../concepts.html">Concepts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../../quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../faq.html">FAQ</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Package Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../engine.html">ignite.engine</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../handlers.html">ignite.handlers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../metrics.html">ignite.metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../distributed.html">ignite.distributed</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../exceptions.html">ignite.exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../utils.html">ignite.utils</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Contrib Package Reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../contrib/engines.html">ignite.contrib.engines</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../contrib/metrics.html">ignite.contrib.metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contrib/handlers.html">ignite.contrib.handlers</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Team</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../about.html">About us</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../governance.html">PyTorch-Ignite governance</a></li>
 </ul>
 
             
@@ -178,7 +188,7 @@
       <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
     <span class="rst-current-version" data-toggle="rst-current-version">
         <span class="fa fa-book"> Other Versions</span>
-        v: v0.1.1.1
+        v: v0.4.3
         <span class="fa fa-caret-down"></span>
     </span>
     <div class="rst-other-versions">
@@ -189,7 +199,8 @@
             <dd><a href="../../../../v0.1.0.4/index.html">v0.1.0.4</a></dd>
             <dd><a href="../../../../v0.1.0.5/index.html">v0.1.0.5</a></dd>
             <dd><a href="../../../../v0.1.1/index.html">v0.1.1</a></dd>
-            <dd><a href="../../../../v0.1.1.1/_modules/ignite/contrib/metrics/roc_auc.html">v0.1.1.1</a></dd>
+            <dd><a href="../../../../v0.1.1.1/index.html">v0.1.1.1</a></dd>
+            <dd><a href="../../../../v0.4.3/_modules/ignite/contrib/metrics/roc_auc.html">v0.4.3</a></dd>
         </dl>
         <dl>
             <dt>Branches</dt>
@@ -263,36 +274,105 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for ignite.contrib.metrics.roc_auc</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Tuple</span>
 
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">sklearn.metrics</span> <span class="kn">import</span> <span class="n">roc_auc_score</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;This contrib module requires sklearn to be installed&quot;</span><span class="p">)</span>
+<span class="kn">import</span> <span class="nn">torch</span>
 
 <span class="kn">from</span> <span class="nn">ignite.metrics</span> <span class="kn">import</span> <span class="n">EpochMetric</span>
 
 
-<span class="k">def</span> <span class="nf">roc_auc_compute_fn</span><span class="p">(</span><span class="n">y_preds</span><span class="p">,</span> <span class="n">y_targets</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">roc_auc_compute_fn</span><span class="p">(</span><span class="n">y_preds</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">y_targets</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">sklearn.metrics</span> <span class="kn">import</span> <span class="n">roc_auc_score</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;This contrib module requires sklearn to be installed.&quot;</span><span class="p">)</span>
+
     <span class="n">y_true</span> <span class="o">=</span> <span class="n">y_targets</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">activation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">y_preds</span> <span class="o">=</span> <span class="n">activation</span><span class="p">(</span><span class="n">y_preds</span><span class="p">)</span>
     <span class="n">y_pred</span> <span class="o">=</span> <span class="n">y_preds</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">roc_auc_score</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">roc_auc_curve_compute_fn</span><span class="p">(</span><span class="n">y_preds</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">y_targets</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">sklearn.metrics</span> <span class="kn">import</span> <span class="n">roc_curve</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;This contrib module requires sklearn to be installed.&quot;</span><span class="p">)</span>
+
+    <span class="n">y_true</span> <span class="o">=</span> <span class="n">y_targets</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+    <span class="n">y_pred</span> <span class="o">=</span> <span class="n">y_preds</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">roc_curve</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ROC_AUC"><a class="viewcode-back" href="../../../../contrib/metrics.html#ignite.contrib.metrics.ROC_AUC">[docs]</a><span class="k">class</span> <span class="nc">ROC_AUC</span><span class="p">(</span><span class="n">EpochMetric</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Computes Area Under the Receiver Operating Characteristic Curve (ROC AUC)</span>
 <span class="sd">    accumulating predictions and the ground-truth during an epoch and applying</span>
 <span class="sd">    `sklearn.metrics.roc_auc_score &lt;http://scikit-learn.org/stable/modules/generated/</span>
-<span class="sd">    sklearn.metrics.roc_auc_score.html#sklearn.metrics.roc_auc_score&gt;`_</span>
+<span class="sd">    sklearn.metrics.roc_auc_score.html#sklearn.metrics.roc_auc_score&gt;`_ .</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        activation (Callable, optional): optional function to apply on prediction tensors,</span>
-<span class="sd">            e.g. `activation=torch.sigmoid` to transform logits.</span>
+<span class="sd">        output_transform (callable, optional): a callable that is used to transform the</span>
+<span class="sd">            :class:`~ignite.engine.engine.Engine`&#39;s ``process_function``&#39;s output into the</span>
+<span class="sd">            form expected by the metric. This can be useful if, for example, you have a multi-output model and</span>
+<span class="sd">            you want to compute the metric with respect to one of the outputs.</span>
+<span class="sd">        check_compute_fn (bool): Default False. If True, `roc_curve</span>
+<span class="sd">            &lt;http://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html#</span>
+<span class="sd">            sklearn.metrics.roc_auc_score&gt;`_ is run on the first batch of data to ensure there are</span>
+<span class="sd">            no issues. User will be warned in case there are any issues computing the function.</span>
+
+<span class="sd">    ROC_AUC expects y to be comprised of 0&#39;s and 1&#39;s. y_pred must either be probability estimates or confidence</span>
+<span class="sd">    values. To apply an activation to y_pred, use output_transform as shown below:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        def activated_output_transform(output):</span>
+<span class="sd">            y_pred, y = output</span>
+<span class="sd">            y_pred = torch.sigmoid(y_pred)</span>
+<span class="sd">            return y_pred, y</span>
+
+<span class="sd">        roc_auc = ROC_AUC(activated_output_transform)</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">ROC_AUC</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">partial</span><span class="p">(</span><span class="n">roc_auc_compute_fn</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">))</span></div>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_transform</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="n">check_compute_fn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">ROC_AUC</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">roc_auc_compute_fn</span><span class="p">,</span> <span class="n">output_transform</span><span class="o">=</span><span class="n">output_transform</span><span class="p">,</span> <span class="n">check_compute_fn</span><span class="o">=</span><span class="n">check_compute_fn</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RocCurve"><a class="viewcode-back" href="../../../../contrib/metrics.html#ignite.contrib.metrics.RocCurve">[docs]</a><span class="k">class</span> <span class="nc">RocCurve</span><span class="p">(</span><span class="n">EpochMetric</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute Receiver operating characteristic (ROC) for binary classification task</span>
+<span class="sd">    by accumulating predictions and the ground-truth during an epoch and applying</span>
+<span class="sd">    `sklearn.metrics.roc_curve &lt;http://scikit-learn.org/stable/modules/generated/</span>
+<span class="sd">    sklearn.metrics.roc_curve.html#sklearn.metrics.roc_curve&gt;`_ .</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        output_transform (callable, optional): a callable that is used to transform the</span>
+<span class="sd">            :class:`~ignite.engine.engine.Engine`&#39;s ``process_function``&#39;s output into the</span>
+<span class="sd">            form expected by the metric. This can be useful if, for example, you have a multi-output model and</span>
+<span class="sd">            you want to compute the metric with respect to one of the outputs.</span>
+<span class="sd">        check_compute_fn (bool): Default False. If True, `sklearn.metrics.roc_curve</span>
+<span class="sd">            &lt;http://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_curve.html#</span>
+<span class="sd">            sklearn.metrics.roc_curve&gt;`_ is run on the first batch of data to ensure there are</span>
+<span class="sd">            no issues. User will be warned in case there are any issues computing the function.</span>
+
+<span class="sd">    RocCurve expects y to be comprised of 0&#39;s and 1&#39;s. y_pred must either be probability estimates or confidence</span>
+<span class="sd">    values. To apply an activation to y_pred, use output_transform as shown below:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        def activated_output_transform(output):</span>
+<span class="sd">            y_pred, y = output</span>
+<span class="sd">            y_pred = torch.sigmoid(y_pred)</span>
+<span class="sd">            return y_pred, y</span>
+
+<span class="sd">        roc_auc = RocCurve(activated_output_transform)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_transform</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="n">check_compute_fn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">RocCurve</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">roc_auc_curve_compute_fn</span><span class="p">,</span> <span class="n">output_transform</span><span class="o">=</span><span class="n">output_transform</span><span class="p">,</span> <span class="n">check_compute_fn</span><span class="o">=</span><span class="n">check_compute_fn</span>
+        <span class="p">)</span></div>
 </pre></div>
 
              </article>
@@ -342,6 +422,7 @@
          <script src="../../../../_static/underscore.js"></script>
          <script src="../../../../_static/doctools.js"></script>
          <script src="../../../../_static/language_data.js"></script>
+         <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
      
 
   
