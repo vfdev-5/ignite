@@ -108,7 +108,6 @@ class ConfusionMatrix(Metric):
             raise ValueError("Argument num_classes needs to be > 1")
 
         self.num_classes = num_classes
-        self._num_examples = 0
         self.average = average
         super(ConfusionMatrix, self).__init__(output_transform=output_transform, device=device)
 
