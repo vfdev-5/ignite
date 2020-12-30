@@ -2,7 +2,7 @@ import functools
 import logging
 import weakref
 from collections import OrderedDict, defaultdict
-from typing import Any, Callable, List, Optional, Union, Mapping, Dict
+from typing import Any, Callable, List, Optional, Union, Mapping
 
 from ignite.engine.events import CallableEventWithFilter, EventEnum, Events, EventsList, RemovableEventHandle
 from ignite.engine.utils import _check_signature
@@ -31,7 +31,11 @@ class Serializable:
 
 
 class EventsDriven:
+    """Base class for events-driven engines without state.
+
+    """
     def __init__(self):
+        # Add auto events registering feature ?
         self._event_handlers = defaultdict(list)
         self._allowed_events = []
         self._allowed_events_counts = {}
@@ -225,6 +229,9 @@ class EventsDriven:
 
 
 class EventsDrivenState:
+    """State for EventsDriven class. State attributed are automatically synchronized with
+    EventsDriven counters.
+    """
 
     def __init__(
         self, engine: Optional[EventsDriven] = None, event_to_attr: Optional[Mapping[Any, str]] = None, **kwargs: Any
@@ -237,31 +244,43 @@ class EventsDrivenState:
 
         self._attr_to_event = None
         if event_to_attr is not None:
-            self._attr_to_event = {v: k for k, v in event_to_attr.items()}  # type: Optional[Dict[str, str]]
+            # Create inverse mapping
+            self._attr_to_event = defaultdict(list)
+            for k, v in event_to_attr.items():
+                self._attr_to_event[v].append(k)
 
     def __getattr__(self, attr):
+        evnts = None
         if self._attr_to_event and attr in self._attr_to_event:
-            attr = self._attr_to_event[attr]
+            evnts = self._attr_to_event[attr]
 
-        if self.engine and attr in self.engine._allowed_events_counts:
-            return self.engine._allowed_events_counts[attr]
+        if self.engine and evnts:
+            # return max of available event counts
+            counts = [self.engine._allowed_events_counts[e] for e in evnts]
+            return max(counts)
 
         raise AttributeError("'{}' object has no attribute '{}'".format(self.__class__.__name__, attr))
 
     def __setattr__(self, attr, value):
         if all([a in self.__dict__ for a in ["engine", "_attr_to_event"]]) and self.__dict__["engine"]:
             self__attr_to_event = self.__dict__["_attr_to_event"]
+            evnts = None
             if self__attr_to_event and attr in self__attr_to_event:
-                attr = self__attr_to_event[attr]
+                evnts = self__attr_to_event[attr]
             self_engine = self.__dict__["engine"]
-            if self_engine and attr in self_engine._allowed_events_counts:
-                self_engine._allowed_events_counts[attr] = value
+            if self_engine and evnts:
+                # Set all counters to provided value
+                for e in evnts:
+                    if e in self_engine._allowed_events_counts:
+                        self_engine._allowed_events_counts[e] = value
                 return
 
         super().__setattr__(attr, value)
 
 
 class EventsDrivenWithState(EventsDriven):
+    """Base class for events-driven engines with state.
+    """
 
     def __init__(self):
         super(EventsDrivenWithState, self).__init__()

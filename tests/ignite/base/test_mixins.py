@@ -1,4 +1,4 @@
-from typing import List, Optional, Union, Mapping
+import pytest
 
 from ignite.base import EventsDriven, EventsDrivenState, Serializable
 from ignite.engine.events import EventEnum
@@ -108,7 +108,9 @@ def test_basic_events_driven_with_state():
     assert e.state.b == 10
     assert e.state.c == 20 * (10 - 3)
 
-    # e.state = EventsDrivenState()
+    with pytest.raises(AttributeError, match=r"can't set attribute"):
+        e.state = EventsDrivenState()
+
     e.state.a = 3
     e.state.b = 4
     e.state.c = 5
@@ -140,6 +142,8 @@ def test_events_driven_with_state_mixed_events():
                 engine=self, event_to_attr={
                     BCEvents.B_EVENT_STARTED: "b",
                     BCEvents.C_EVENT_STARTED: "c",
+                    BCEvents.B_EVENT_COMPLETED: "b",
+                    BCEvents.C_EVENT_COMPLETED: "c",
                 }
             )
 
@@ -150,6 +154,8 @@ def test_events_driven_with_state_mixed_events():
         def _check(self):
             assert self.state.b == self._allowed_events_counts[BCEvents.B_EVENT_STARTED]
             assert self.state.c == self._allowed_events_counts[BCEvents.C_EVENT_STARTED]
+            assert self.state.b - 1 == self._allowed_events_counts[BCEvents.B_EVENT_COMPLETED]
+            assert self.state.c - 1 == self._allowed_events_counts[BCEvents.C_EVENT_COMPLETED]
 
         def run(self, n, k, reset=True):
             if reset:
@@ -174,34 +180,33 @@ def test_events_driven_with_state_mixed_events():
     def check_c():
         assert e.state.c == e._allowed_events_counts[BCEvents.C_EVENT_STARTED]
 
-    # class XYZEvents(EventEnum):
-    #     A_EVENT = "X_event"
-    #     B_EVENT = "Y_event"
-    #     C_EVENT = "Z_event"
-    #
-    # e.register_events(*XYZEvents)
-
     e.run(10, 20)
     assert e.state.b == 10
     assert e.state.c == 20 * 10
 
-    # e.state.b = 3
-    # e.state.c = 4
-    #
-    # assert e._allowed_events_counts[BCEvents.B_EVENT_STARTED] == 3
-    # assert e._allowed_events_counts[BCEvents.C_EVENT_STARTED] == 4
-    #
-    # e.run(10, 20, reset=False)
-    # assert e.state.b == 10
-    # assert e.state.c == 20 * (10 - 3)
-    #
-    # # e.state = EventsDrivenState()
-    # e.state.b = 4
-    # e.state.c = 5
-    #
-    # assert e._allowed_events_counts[ABCEvents.B_EVENT] == 4
-    # assert e._allowed_events_counts[ABCEvents.C_EVENT] == 5
-    #
-    # e.run(10, 20, reset=False)
-    # assert e.state.b == 10
-    # assert e.state.c == 20 * (10 - 4)
+    e.state.b = 3
+    e.state.c = 4
+
+    assert e._allowed_events_counts[BCEvents.B_EVENT_STARTED] == 3
+    assert e._allowed_events_counts[BCEvents.C_EVENT_STARTED] == 4
+    assert e._allowed_events_counts[BCEvents.B_EVENT_COMPLETED] == 3
+    assert e._allowed_events_counts[BCEvents.C_EVENT_COMPLETED] == 4
+
+    e.run(10, 20, reset=False)
+    assert e.state.b == 10
+    assert e.state.c == 20 * (10 - 3)
+
+    with pytest.raises(AttributeError, match=r"can't set attribute"):
+        e.state = EventsDrivenState()
+
+    e.state.b = 4
+    e.state.c = 5
+
+    assert e._allowed_events_counts[BCEvents.B_EVENT_STARTED] == 4
+    assert e._allowed_events_counts[BCEvents.C_EVENT_STARTED] == 5
+    assert e._allowed_events_counts[BCEvents.B_EVENT_STARTED] == 4
+    assert e._allowed_events_counts[BCEvents.C_EVENT_STARTED] == 5
+
+    e.run(10, 20, reset=False)
+    assert e.state.b == 10
+    assert e.state.c == 20 * (10 - 4)
