@@ -395,9 +395,9 @@ def test_integration():
     recall = state.metrics["recall"].numpy()
     f1 = state.metrics["f1"].numpy()
 
-    assert precision_true == approx(precision), "{} vs {}".format(precision_true, precision)
-    assert recall_true == approx(recall), "{} vs {}".format(recall_true, recall)
-    assert f1_true == approx(f1), "{} vs {}".format(f1_true, f1)
+    assert precision_true == approx(precision), f"{precision_true} vs {precision}"
+    assert recall_true == approx(recall), f"{recall_true} vs {recall}"
+    assert f1_true == approx(f1), f"{f1_true} vs {f1}"
 
 
 def test_abstract_class():
@@ -586,7 +586,7 @@ def _test_creating_on_xla_fails(device):
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Skip if no GPU")
 def test_distrib_gpu(distributed_context_single_node_nccl):
 
-    device = "cuda:{}".format(distributed_context_single_node_nccl["local_rank"])
+    device = f"cuda:{distributed_context_single_node_nccl['local_rank']}"
     _test_distrib_sync_all_reduce_decorator(device)
 
 
@@ -621,7 +621,7 @@ def test_multinode_distrib_cpu(distributed_context_multi_node_gloo):
 @pytest.mark.skipif(not idist.has_native_dist_support, reason="Skip if no native dist support")
 @pytest.mark.skipif("GPU_MULTINODE_DISTRIB" not in os.environ, reason="Skip if not multi-node distributed")
 def test_multinode_distrib_gpu(distributed_context_multi_node_nccl):
-    device = "cuda:{}".format(distributed_context_multi_node_nccl["local_rank"])
+    device = f"cuda:{distributed_context_multi_node_nccl['local_rank']}"
     _test_distrib_sync_all_reduce_decorator(device)
 
 
@@ -672,7 +672,10 @@ def test_completed():
     engine = MagicMock(state=State(metrics={}))
     metrics = {"foo": 1, "bar": torch.tensor(2.0), "baz": {"qux": "quux"}}
     m.compute = MagicMock(return_value=metrics)
+    with pytest.raises(ValueError, match=r"Argument name 'foo' is conflicting with mapping keys"):
+        m.completed(engine, "foo")
     m.completed(engine, "metric")
+    metrics["metric"] = metrics
     assert engine.state.metrics == metrics
 
     # other

@@ -5,7 +5,7 @@ import warnings
 from collections import defaultdict
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, List, Mapping, Optional, Type
+from typing import Any, Callable, DefaultDict, List, Mapping, Optional, Tuple, Type, Union
 
 import torch
 from torch.nn import Module
@@ -19,7 +19,7 @@ from ignite.contrib.handlers.base_logger import (
     BaseWeightsHistHandler,
     BaseWeightsScalarHandler,
 )
-from ignite.engine import Engine, EventEnum
+from ignite.engine import Engine, Events
 from ignite.handlers import global_step_from_engine
 from ignite.handlers.checkpoint import DiskSaver
 
@@ -119,7 +119,7 @@ class TrainsLogger(BaseLogger):
 
     """
 
-    def __init__(self, *_, **kwargs: Any):
+    def __init__(self, *_: Any, **kwargs: Any) -> None:
         try:
             from trains import Task
             from trains.binding.frameworks.tensorflow_bind import WeightsGradientHistHelper
@@ -135,15 +135,15 @@ class TrainsLogger(BaseLogger):
             warnings.warn("TrainsSaver: running in bypass mode")
 
             class _Stub(object):
-                def __call__(self, *_, **__):
+                def __call__(self, *_: Any, **__: Any) -> "_Stub":
                     return self
 
-                def __getattr__(self, attr):
+                def __getattr__(self, attr: str) -> "_Stub":
                     if attr in ("name", "id"):
-                        return ""
+                        return ""  # type: ignore[return-value]
                     return self
 
-                def __setattr__(self, attr, val):
+                def __setattr__(self, attr: str, val: Any) -> None:
                     pass
 
             self._task = _Stub()
@@ -173,21 +173,23 @@ class TrainsLogger(BaseLogger):
     def bypass_mode(cls) -> bool:
         """
         Returns the bypass mode state.
+
         Note:
             `GITHUB_ACTIONS` env will automatically set bypass_mode to ``True``
             unless overridden specifically with ``TrainsLogger.set_bypass_mode(False)``.
+
         Return:
             If True, all outside communication is skipped.
         """
         return getattr(cls, "_bypass", bool(os.environ.get("CI")))
 
-    def close(self):
+    def close(self) -> None:
         self.trains_logger.flush()
 
-    def _create_output_handler(self, *args: Any, **kwargs: Any):
+    def _create_output_handler(self, *args: Any, **kwargs: Any) -> "OutputHandler":
         return OutputHandler(*args, **kwargs)
 
-    def _create_opt_params_handler(self, *args: Any, **kwargs: Any):
+    def _create_opt_params_handler(self, *args: Any, **kwargs: Any) -> "OptimizerParamsHandler":
         return OptimizerParamsHandler(*args, **kwargs)
 
 
@@ -276,7 +278,6 @@ class OutputHandler(BaseOutputHandler):
             :meth:`~ignite.contrib.handlers.trains_logger.global_step_from_engine`.
 
     Note:
-
         Example of `global_step_transform`:
 
         .. code-block:: python
@@ -292,22 +293,22 @@ class OutputHandler(BaseOutputHandler):
         metric_names: Optional[List[str]] = None,
         output_transform: Optional[Callable] = None,
         global_step_transform: Optional[Callable] = None,
-    ):
+    ) -> None:
         super(OutputHandler, self).__init__(tag, metric_names, output_transform, global_step_transform)
 
-    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: EventEnum):
+    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: Union[str, Events]) -> None:
 
         if not isinstance(logger, TrainsLogger):
             raise RuntimeError("Handler OutputHandler works only with TrainsLogger")
 
         metrics = self._setup_output_metrics(engine)
 
-        global_step = self.global_step_transform(engine, event_name)
+        global_step = self.global_step_transform(engine, event_name)  # type: ignore[misc]
 
         if not isinstance(global_step, int):
             raise TypeError(
-                "global_step must be int, got {}."
-                " Please check the output of global_step_transform.".format(type(global_step))
+                f"global_step must be int, got {type(global_step)}."
+                " Please check the output of global_step_transform."
             )
 
         for key, value in metrics.items():
@@ -316,10 +317,10 @@ class OutputHandler(BaseOutputHandler):
             elif isinstance(value, torch.Tensor) and value.ndimension() == 1:
                 for i, v in enumerate(value):
                     logger.trains_logger.report_scalar(
-                        title="{}/{}".format(self.tag, key), series=str(i), iteration=global_step, value=v.item()
+                        title=f"{self.tag}/{key}", series=str(i), iteration=global_step, value=v.item()
                     )
             else:
-                warnings.warn("TrainsLogger output_handler can not log metrics value type {}".format(type(value)))
+                warnings.warn(f"TrainsLogger output_handler can not log metrics value type {type(value)}")
 
 
 class OptimizerParamsHandler(BaseOptimizerParamsHandler):
@@ -358,22 +359,22 @@ class OptimizerParamsHandler(BaseOptimizerParamsHandler):
         tag (str, optional): common title for all produced plots. For example, "generator"
     """
 
-    def __init__(self, optimizer: Optimizer, param_name: str = "lr", tag: Optional[str] = None):
+    def __init__(self, optimizer: Optimizer, param_name: str = "lr", tag: Optional[str] = None) -> None:
         super(OptimizerParamsHandler, self).__init__(optimizer, param_name, tag)
 
-    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: EventEnum):
+    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: Union[str, Events]) -> None:
         if not isinstance(logger, TrainsLogger):
             raise RuntimeError("Handler OptimizerParamsHandler works only with TrainsLogger")
 
         global_step = engine.state.get_event_attrib_value(event_name)
-        tag_prefix = "{}/".format(self.tag) if self.tag else ""
+        tag_prefix = f"{self.tag}/" if self.tag else ""
         params = {
             str(i): float(param_group[self.param_name]) for i, param_group in enumerate(self.optimizer.param_groups)
         }
 
         for k, v in params.items():
             logger.trains_logger.report_scalar(
-                title="{}{}".format(tag_prefix, self.param_name), series=k, value=v, iteration=global_step
+                title=f"{tag_prefix}{self.param_name}", series=k, value=v, iteration=global_step
             )
 
 
@@ -409,23 +410,23 @@ class WeightsScalarHandler(BaseWeightsScalarHandler):
 
     """
 
-    def __init__(self, model: Module, reduction: Callable = torch.norm, tag: Optional[str] = None):
+    def __init__(self, model: Module, reduction: Callable = torch.norm, tag: Optional[str] = None) -> None:
         super(WeightsScalarHandler, self).__init__(model, reduction, tag=tag)
 
-    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: EventEnum):
+    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: Union[str, Events]) -> None:
 
         if not isinstance(logger, TrainsLogger):
             raise RuntimeError("Handler WeightsScalarHandler works only with TrainsLogger")
 
         global_step = engine.state.get_event_attrib_value(event_name)
-        tag_prefix = "{}/".format(self.tag) if self.tag else ""
+        tag_prefix = f"{self.tag}/" if self.tag else ""
         for name, p in self.model.named_parameters():
             if p.grad is None:
                 continue
 
             title_name, _, series_name = name.partition(".")
             logger.trains_logger.report_scalar(
-                title="{}weights_{}/{}".format(tag_prefix, self.reduction.__name__, title_name),
+                title=f"{tag_prefix}weights_{self.reduction.__name__}/{title_name}",
                 series=series_name,
                 value=self.reduction(p.data),
                 iteration=global_step,
@@ -461,15 +462,15 @@ class WeightsHistHandler(BaseWeightsHistHandler):
 
     """
 
-    def __init__(self, model: Module, tag: Optional[str] = None):
+    def __init__(self, model: Module, tag: Optional[str] = None) -> None:
         super(WeightsHistHandler, self).__init__(model, tag=tag)
 
-    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: EventEnum):
+    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: Union[str, Events]) -> None:
         if not isinstance(logger, TrainsLogger):
             raise RuntimeError("Handler 'WeightsHistHandler' works only with TrainsLogger")
 
         global_step = engine.state.get_event_attrib_value(event_name)
-        tag_prefix = "{}/".format(self.tag) if self.tag else ""
+        tag_prefix = f"{self.tag}/" if self.tag else ""
         for name, p in self.model.named_parameters():
             if p.grad is None:
                 continue
@@ -477,7 +478,7 @@ class WeightsHistHandler(BaseWeightsHistHandler):
             title_name, _, series_name = name.partition(".")
 
             logger.grad_helper.add_histogram(
-                title="{}weights_{}".format(tag_prefix, title_name),
+                title=f"{tag_prefix}weights_{title_name}",
                 series=series_name,
                 step=global_step,
                 hist_data=p.grad.detach().cpu().numpy(),
@@ -516,22 +517,22 @@ class GradsScalarHandler(BaseWeightsScalarHandler):
 
     """
 
-    def __init__(self, model: Module, reduction: Callable = torch.norm, tag: Optional[str] = None):
+    def __init__(self, model: Module, reduction: Callable = torch.norm, tag: Optional[str] = None) -> None:
         super(GradsScalarHandler, self).__init__(model, reduction, tag=tag)
 
-    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: EventEnum):
+    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: Union[str, Events]) -> None:
         if not isinstance(logger, TrainsLogger):
             raise RuntimeError("Handler GradsScalarHandler works only with TrainsLogger")
 
         global_step = engine.state.get_event_attrib_value(event_name)
-        tag_prefix = "{}/".format(self.tag) if self.tag else ""
+        tag_prefix = f"{self.tag}/" if self.tag else ""
         for name, p in self.model.named_parameters():
             if p.grad is None:
                 continue
 
             title_name, _, series_name = name.partition(".")
             logger.trains_logger.report_scalar(
-                title="{}grads_{}/{}".format(tag_prefix, self.reduction.__name__, title_name),
+                title=f"{tag_prefix}grads_{self.reduction.__name__}/{title_name}",
                 series=series_name,
                 value=self.reduction(p.data),
                 iteration=global_step,
@@ -567,15 +568,15 @@ class GradsHistHandler(BaseWeightsHistHandler):
 
     """
 
-    def __init__(self, model: Module, tag: Optional[str] = None):
+    def __init__(self, model: Module, tag: Optional[str] = None) -> None:
         super(GradsHistHandler, self).__init__(model, tag=tag)
 
-    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: EventEnum):
+    def __call__(self, engine: Engine, logger: TrainsLogger, event_name: Union[str, Events]) -> None:
         if not isinstance(logger, TrainsLogger):
             raise RuntimeError("Handler 'GradsHistHandler' works only with TrainsLogger")
 
         global_step = engine.state.get_event_attrib_value(event_name)
-        tag_prefix = "{}/".format(self.tag) if self.tag else ""
+        tag_prefix = f"{self.tag}/" if self.tag else ""
         for name, p in self.model.named_parameters():
             if p.grad is None:
                 continue
@@ -583,7 +584,7 @@ class GradsHistHandler(BaseWeightsHistHandler):
             title_name, _, series_name = name.partition(".")
 
             logger.grad_helper.add_histogram(
-                title="{}grads_{}".format(tag_prefix, title_name),
+                title=f"{tag_prefix}grads_{title_name}",
                 series=series_name,
                 step=global_step,
                 hist_data=p.grad.detach().cpu().numpy(),
@@ -632,33 +633,36 @@ class TrainsSaver(DiskSaver):
     """
 
     def __init__(
-        self, logger: TrainsLogger = None, output_uri: str = None, dirname: str = None, *args: Any, **kwargs: Any
-    ):
+        self,
+        logger: Optional[TrainsLogger] = None,
+        output_uri: Optional[str] = None,
+        dirname: Optional[str] = None,
+        *args: Any,
+        **kwargs: Any
+    ) -> None:
 
         self._setup_check_trains(logger, output_uri)
 
         if not dirname:
             dirname = ""
             if idist.get_rank() == 0:
-                dirname = tempfile.mkdtemp(
-                    prefix="ignite_checkpoints_{}".format(datetime.now().strftime("%Y_%m_%d_%H_%M_%S_"))
-                )
+                dirname = tempfile.mkdtemp(prefix=f"ignite_checkpoints_{datetime.now().strftime('%Y_%m_%d_%H_%M_%S_')}")
             if idist.get_world_size() > 1:
-                dirname = idist.all_gather(dirname)[0]
+                dirname = idist.all_gather(dirname)[0]  # type: ignore[index, assignment]
 
-            warnings.warn("TrainsSaver created a temporary checkpoints directory: {}".format(dirname))
+            warnings.warn(f"TrainsSaver created a temporary checkpoints directory: {dirname}")
             idist.barrier()
 
         # Let's set non-atomic tmp dir saving behaviour
         if "atomic" not in kwargs:
             kwargs["atomic"] = False
 
-        self._checkpoint_slots = defaultdict(list)
+        self._checkpoint_slots = defaultdict(list)  # type: DefaultDict[Union[str, Tuple[str, str]], List[Any]]
 
-        super(TrainsSaver, self).__init__(dirname=dirname, *args, **kwargs)
+        super(TrainsSaver, self).__init__(dirname=dirname, *args, **kwargs)  # type: ignore[misc]
 
     @idist.one_rank_only()
-    def _setup_check_trains(self, logger: TrainsLogger, output_uri: str):
+    def _setup_check_trains(self, logger: TrainsLogger, output_uri: str) -> None:
         try:
             from trains import Task
         except ImportError:
@@ -689,7 +693,7 @@ class TrainsSaver(DiskSaver):
             filename: str,
             basename: str,
             metadata: Optional[Mapping] = None,
-        ):
+        ) -> None:
             self._callback_type = callback_type
             self._slots = slots
             self._checkpoint_key = str(checkpoint_key)
@@ -697,8 +701,8 @@ class TrainsSaver(DiskSaver):
             self._basename = basename
             self._metadata = metadata
 
-        def pre_callback(self, action: str, model_info: Any):
-            if action != self._callback_type.save:
+        def pre_callback(self, action: str, model_info: Any) -> Any:
+            if action != self._callback_type.save:  # type: ignore[attr-defined]
                 return model_info
 
             try:
@@ -708,19 +712,18 @@ class TrainsSaver(DiskSaver):
                 self._slots.append(model_info.upload_filename)
                 slot = len(self._slots) - 1
 
-            model_info.upload_filename = "{}_{}{}".format(self._basename, slot, os.path.splitext(self._filename)[1])
-            model_info.local_model_id = "{}:{}".format(self._checkpoint_key, model_info.upload_filename)
+            model_info.upload_filename = f"{self._basename}_{slot}{os.path.splitext(self._filename)[1]}"
+            model_info.local_model_id = f"{self._checkpoint_key}:{model_info.upload_filename}"
             return model_info
 
-        def post_callback(self, action: str, model_info: Any):
-            if action != self._callback_type.save:
+        def post_callback(self, action: str, model_info: Any) -> Any:
+            if action != self._callback_type.save:  # type: ignore[attr-defined]
                 return model_info
 
-            model_info.model.name = "{}: {}".format(model_info.task.name, self._filename)
+            model_info.model.name = f"{model_info.task.name}: {self._filename}"
             prefix = "Checkpoint Metadata: "
-            metadata = "{}{}".format(
-                prefix, ", ".join("{}={}".format(k, v) for k, v in self._metadata.items()) if self._metadata else "none"
-            )
+            metadata_items = ", ".join(f"{k}={v}" for k, v in self._metadata.items()) if self._metadata else "none"
+            metadata = f"{prefix}{metadata_items}"
             comment = "\n".join(
                 metadata if line.startswith(prefix) else line for line in (model_info.model.comment or "").split("\n")
             )
@@ -741,7 +744,7 @@ class TrainsSaver(DiskSaver):
             )
 
         try:
-            basename = metadata["basename"]
+            basename = metadata["basename"]  # type: ignore[index]
         except (TypeError, KeyError):
             warnings.warn("Checkpoint metadata missing or basename cannot be found")
             basename = "checkpoint"
@@ -783,7 +786,9 @@ class TrainsSaver(DiskSaver):
         artifact = self._task.artifacts.get(filename)
         if artifact:
             return artifact.get_local_copy()
-        self._task.get_logger().report_text("Can not find artifact {}".format(filename))
+        self._task.get_logger().report_text(f"Can not find artifact {filename}")
+
+        return None
 
     @idist.one_rank_only()
     def remove(self, filename: str) -> None:

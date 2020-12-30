@@ -62,7 +62,7 @@ git clone https://github.com/pytorch/ignite.git
 cd ignite
 python setup.py develop
 pip install -r requirements-dev.txt
-pip install flake8 "black==19.10b0" "isort==4.3.21" "mypy==0.782"
+pip install flake8 "black==19.10b0" "isort==4.3.21" mypy
 ```
 
 ### Code development
@@ -109,7 +109,7 @@ git add .
 git commit -m "Added awesome feature"
 ```
 
-#### Formatting with pre-commit
+##### Formatting with pre-commit
 
 To automate the process, we have configured the repo with [pre-commit hooks](https://pre-commit.com/) to use black to autoformat the staged files to ensure every commit complies with a style guide. This requires some setup, which is described below:
 
@@ -146,9 +146,7 @@ pytest tests/ignite/engine/test_engine.py -vvv -k test_terminate
 ```
 To run all tests with coverage (assuming installed `pytest-cov`):
 ```bash
-CI_PYTHON_VERSION=<your python version, e.g 3.7> sh tests/run_cpu_tests.sh
-# for example
-# CI_PYTHON_VERSION=3.7 sh tests/run_cpu_tests.sh
+bash tests/run_cpu_tests.sh
 ```
 
 #### Run Mypy checks:
@@ -167,6 +165,30 @@ If you are not familiar with creating a Pull Request, here are some guides:
 - http://stackoverflow.com/questions/14680711/how-to-do-a-github-pull-request
 - https://help.github.com/articles/creating-a-pull-request/
 
+##### Sync up with the upstream
+
+First, make sure you have set [upstream](https://docs.github.com/en/free-pro-team@latest/github/collaborating-with-issues-and-pull-requests/configuring-a-remote-for-a-fork) by running:
+
+```bash
+git remote add upstream https://github.com/pytorch/ignite
+```
+
+Then you can see if you have set up multiple remote correctly by running `git remote -v`:
+
+```bash
+origin  https://github.com/{YOUR_USERNAME}/ignite.git (fetch)
+origin  https://github.com/{YOUR_USERNAME}/ignite.git (push)
+upstream        https://github.com/pytorch/ignite (fetch)
+upstream        https://github.com/pytorch/ignite (push)
+```
+
+Now you can get the latest development into your forked repository with this:
+
+```bash
+git fetch upstream
+git checkout master
+git merge upstream/master
+```
 
 ### Writing documentation
 

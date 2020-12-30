@@ -48,8 +48,8 @@ function can return everything user wants. Output is set to ``trainer.state.outp
 
 .. Note ::
 
-    By default, epoch length is defined by ``len(data)``. However, user can also manually define the epoch length as a
-    number of iterations to loop. In this way the input data can be an iterator.
+    By default, epoch length is defined by ``len(data)``. However, a user can also manually define the epoch length as a
+    number of iterations to loop over. In this way, the input data can be an iterator.
 
     .. code-block:: python
 
@@ -59,7 +59,7 @@ function can return everything user wants. Output is set to ``trainer.state.outp
     will be automatically determined when data iterator is exhausted.
 
 
-**Mostly any complexity training logic** can be coded as ``train_step`` method and a trainer constructed using this method.
+**Mostly any complexity training logic** can be coded as ``train_step`` method and a trainer can be constructed using this method.
 Argument ``batch`` in ``train_step`` function is user-defined and can contain any data required for a single iteration.
 
 .. code-block:: python
@@ -111,7 +111,7 @@ For multi-models training examples like GAN's, please, see our :doc:`examples`.
 Events and Handlers
 -------------------
 
-To improve the :class:`~ignite.engine.engine.Engine`'s flexibility, an event system is introduced that facilitates interaction on each step of
+To improve the :class:`~ignite.engine.engine.Engine`'s flexibility, an event system is introduced which facilitates interaction on each step of
 the run:
 
 - *engine is started/completed*
@@ -120,8 +120,8 @@ the run:
 
 Complete list of events can be found at :class:`~ignite.engine.events.Events`.
 
-Thus, user can execute a custom code as an event handler. Handlers can be any function: e.g. lambda, simple function,
-class method etc. The first argument can be optionally `engine`, but not necessary.
+Thus, a user can execute a custom code as an event handler. Handlers can be any function: e.g. lambda, simple function,
+class method etc. The first argument can be optionally `engine`, but not necessarily.
 
 Let us consider in more detail what happens when :meth:`~ignite.engine.engine.Engine.run` is called:
 
@@ -140,9 +140,9 @@ Let us consider in more detail what happens when :meth:`~ignite.engine.engine.En
         fire_event(Events.EPOCH_COMPLETED)
     fire_event(Events.COMPLETED)
 
-At first *"engine is started"* event is fired and all its event handlers are executed (we will see in the next paragraph
+At first, *"engine is started"* event is fired and all its event handlers are executed (we will see in the next paragraph
 how to add event handlers). Next, `while` loop is started and *"epoch is started"* event occurs, etc. Every time
-an event is "fired", attached handlers are executed.
+an event is fired, attached handlers are executed.
 
 Attaching an event handler is simple using method :meth:`~ignite.engine.engine.Engine.add_event_handler` or
 :meth:`~ignite.engine.engine.Engine.on` decorator:
@@ -165,7 +165,7 @@ Attaching an event handler is simple using method :meth:`~ignite.engine.engine.E
     mydata = [1, 2, 3, 4]
 
     def on_training_ended(data):
-        print("Training is ended. mydata={}".format(data))
+        print(f"Training is ended. mydata={data}")
 
     trainer.add_event_handler(Events.COMPLETED, on_training_ended, mydata)
 
@@ -181,8 +181,7 @@ reference returned by :meth:`~ignite.engine.engine.Engine.add_event_handler`. Th
     evaluator = create_supervised_evaluator(model, metrics={"acc": Accuracy()})
 
     def log_metrics(engine, title):
-        print("Epoch: {} - {} accuracy: {:.2f}"
-               .format(trainer.state.epoch, title, engine.state.metrics["acc"]))
+        print(f"Epoch: {trainer.state.epoch} - {title} accuracy: {engine.state.metrics['acc']:.2f}")
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def evaluate(trainer):
@@ -210,8 +209,7 @@ event filtering function:
 
     @trainer.on(Events.ITERATION_COMPLETED(every=50))
     def log_training_loss_every_50_iterations():
-        print("{} / {} : {} - loss: {:.2f}"
-              .format(trainer.state.epoch, trainer.state.max_epochs, trainer.state.iteration, trainer.state.output))
+        print(f"{trainer.state.epoch} / {trainer.state.max_epochs} : {trainer.state.iteration} - loss: {trainer.state.output:.2f}")
 
     @trainer.on(Events.EPOCH_STARTED(once=25))
     def do_something_once_on_25_epoch():
@@ -339,7 +337,7 @@ every iteration.
         iteration = engine.state.iteration
         epoch = engine.state.epoch
         loss = engine.state.output
-        print("Epoch: {}, Iteration: {}, Loss: {}".format(epoch, iteration, loss))
+        print(f"Epoch: {epoch}, Iteration: {iteration}, Loss: {loss}")
 
     trainer.add_event_handler(Events.ITERATION_COMPLETED, on_iteration_completed)
 
@@ -366,7 +364,7 @@ In the code below, `engine.state.output` will be a list of loss, y_pred, y for t
     def print_loss(engine):
         epoch = engine.state.epoch
         loss = engine.state.output[0]
-        print ('Epoch {epoch}: train_loss = {loss}'.format(epoch=epoch, loss=loss))
+        print (f'Epoch {epoch}: train_loss = {loss}')
 
     accuracy = Accuracy(output_transform=lambda x: [x[1], x[2]])
     accuracy.attach(trainer, 'acc')
@@ -394,7 +392,7 @@ batch, this is how the user can use `output_transform` to get y_pred and y from 
     def print_loss(engine):
         epoch = engine.state.epoch
         loss = engine.state.output['loss']
-        print ('Epoch {epoch}: train_loss = {loss}'.format(epoch=epoch, loss=loss))
+        print (f'Epoch {epoch}: train_loss = {loss}')
 
     accuracy = Accuracy(output_transform=lambda x: [x['y_pred'], x['y']])
     accuracy.attach(trainer, 'acc')

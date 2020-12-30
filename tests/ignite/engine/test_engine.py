@@ -446,9 +446,7 @@ def _test_check_triggered_events(data, max_epochs, epoch_length, exp_iter_stops=
     }
 
     for n, handler in handlers.items():
-        assert handler.call_count == expected_num_calls[n], "{}: {} vs {}".format(
-            n, handler.call_count, expected_num_calls[n]
-        )
+        assert handler.call_count == expected_num_calls[n], f"{n}: {handler.call_count} vs {expected_num_calls[n]}"
 
 
 def _test_run_check_triggered_events():
@@ -717,7 +715,7 @@ def test_faq_inf_iterator_with_epoch_length():
     def train_step(trainer, batch):
         # ...
         s = trainer.state
-        print("{}/{} : {} - {:.3f}".format(s.epoch, s.max_epochs, s.iteration, batch.norm()))
+        print(f"{s.epoch}/{s.max_epochs} : {s.iteration} - {batch.norm():.3f}")
 
     trainer = Engine(train_step)
     # We need to specify epoch_length to define the epoch
@@ -742,7 +740,7 @@ def test_faq_inf_iterator_no_epoch_length():
     def train_step(trainer, batch):
         # ...
         s = trainer.state
-        print("{}/{} : {} - {:.3f}".format(s.epoch, s.max_epochs, s.iteration, batch.norm()))
+        print(f"{s.epoch}/{s.max_epochs} : {s.iteration} - {batch.norm():.3f}")
 
     trainer = Engine(train_step)
 
@@ -770,7 +768,7 @@ def test_faq_fin_iterator_unknw_size():
     def train_step(trainer, batch):
         # ...
         s = trainer.state
-        print("{}/{} : {} - {:.3f}".format(s.epoch, s.max_epochs, s.iteration, batch))
+        print(f"{s.epoch}/{s.max_epochs} : {s.iteration} - {batch:.3f}")
 
     trainer = Engine(train_step)
 
@@ -797,7 +795,7 @@ def test_faq_fin_iterator_unknw_size():
     def val_step(evaluator, batch):
         # ...
         s = evaluator.state
-        print("{}/{} : {} - {:.3f}".format(s.epoch, s.max_epochs, s.iteration, batch))
+        print(f"{s.epoch}/{s.max_epochs} : {s.iteration} - {batch:.3f}")
 
     evaluator = Engine(val_step)
 
@@ -824,7 +822,7 @@ def test_faq_fin_iterator():
     def train_step(trainer, batch):
         # ...
         s = trainer.state
-        print("{}/{} : {} - {:.3f}".format(s.epoch, s.max_epochs, s.iteration, batch))
+        print(f"{s.epoch}/{s.max_epochs} : {s.iteration} - {batch:.3f}")
 
     trainer = Engine(train_step)
 
@@ -853,7 +851,7 @@ def test_faq_fin_iterator():
     def val_step(evaluator, batch):
         # ...
         s = evaluator.state
-        print("{}/{} : {} - {:.3f}".format(s.epoch, s.max_epochs, s.iteration, batch))
+        print(f"{s.epoch}/{s.max_epochs} : {s.iteration} - {batch:.3f}")
 
     evaluator = Engine(val_step)
 
@@ -880,9 +878,9 @@ def test_set_data():
 
     def train_fn(e, batch):
         if e.state.iteration <= switch_iteration:
-            assert batch.shape[1] == 11, "{}: {}".format(e.state.iteration, batch.shape)
+            assert batch.shape[1] == 11, f"{e.state.iteration}: {batch.shape}"
         else:
-            assert batch.shape[1] == 22, "{}: {}".format(e.state.iteration, batch.shape)
+            assert batch.shape[1] == 22, f"{e.state.iteration}: {batch.shape}"
 
     trainer = Engine(train_fn)
 
@@ -891,3 +889,49 @@ def test_set_data():
         trainer.set_data(data2)
 
     trainer.run(data1, max_epochs=10)
+
+
+def test_run_with_max_iters():
+    max_iters = 8
+    engine = Engine(lambda e, b: 1)
+    engine.run([0] * 20, max_iters=max_iters)
+    assert engine.state.iteration == max_iters
+    assert engine.state.max_iters == max_iters
+
+
+def test_run_with_max_iters_greater_than_epoch_length():
+    max_iters = 73
+    engine = Engine(lambda e, b: 1)
+    engine.run([0] * 20, max_iters=max_iters)
+    assert engine.state.iteration == max_iters
+
+
+def test_run_with_invalid_max_iters_and_max_epoch():
+    max_iters = 12
+    max_epochs = 2
+    engine = Engine(lambda e, b: 1)
+    with pytest.raises(
+        ValueError,
+        match=r"Arguments max_iters and max_epochs are mutually exclusive."
+        "Please provide only max_epochs or max_iters.",
+    ):
+        engine.run([0] * 20, max_iters=max_iters, max_epochs=max_epochs)
+
+
+def test_epoch_events_fired():
+    max_iters = 32
+    engine = Engine(lambda e, b: 1)
+
+    @engine.on(Events.EPOCH_COMPLETED)
+    def fired_event(engine):
+        assert engine.state.iteration % engine.state.epoch_length == 0
+
+    engine.run([0] * 10, max_iters=max_iters)
+
+
+def test_is_done_with_max_iters():
+    state = State(iteration=100, epoch=1, max_epochs=3, epoch_length=100, max_iters=250)
+    assert not Engine._is_done(state)
+
+    state = State(iteration=250, epoch=1, max_epochs=3, epoch_length=100, max_iters=250)
+    assert Engine._is_done(state)

@@ -4,9 +4,9 @@ import os
 import tempfile
 import warnings
 from abc import ABCMeta, abstractmethod
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
 from tempfile import _TemporaryFileWrapper  # type: ignore[attr-defined]
-from typing import Callable, Mapping, Optional, Union
+from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -66,7 +66,7 @@ class BaseSaveHandler(metaclass=ABCMeta):
 
 class Checkpoint(Serializable):
     """Checkpoint handler can be used to periodically save and load objects which have attribute
-    ``state_dict`/`load_state_dict``. This class can use specific save handlers to store on the disk or a cloud
+    ``state_dict/load_state_dict``. This class can use specific save handlers to store on the disk or a cloud
     storage, etc. The Checkpoint handler (if used with :class:`~ignite.handlers.DiskSaver`) also handles automatically
     moving data on TPU to CPU before writing the checkpoint.
 
@@ -196,10 +196,24 @@ class Checkpoint(Serializable):
             lr_scheduler = ...
 
             to_save = {'model': model, 'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'trainer': trainer}
-            handler = Checkpoint(to_save, DiskSaver('/tmp/models', create_dir=True), n_saved=2)
-            trainer.add_event_handler(Events.ITERATION_COMPLETED(every=1000), handler)
+
+            if (checkpoint_iters):
+                # A: Output is "checkpoint_<iteration>.pt"
+                handler = Checkpoint(
+                    to_save, DiskSaver('/tmp/models', create_dir=True), n_saved=2
+                )
+                trainer.add_event_handler(Events.ITERATION_COMPLETED(every=1000), handler)
+            else:
+                # B:Output is "checkpoint_<epoch>.pt"
+                gst = lambda *_: trainer.state.epoch
+                handler = Checkpoint(
+                    to_save, DiskSaver('/tmp/models', create_dir=True), n_saved=2, global_step_transform=gst
+                )
+                trainer.add_event_handler(Events.EPOCH_COMPLETED, handler)
+
             trainer.run(data_loader, max_epochs=6)
-            > ["checkpoint_7000.pt", "checkpoint_8000.pt", ]
+            > A: ["checkpoint_7000.pt", "checkpoint_8000.pt", ]
+            > B: ["checkpoint_5.pt", "checkpoint_6.pt", ]
 
         Attach the handler to an evaluator to save best model during the training
         according to computed validation metric:
@@ -233,7 +247,7 @@ class Checkpoint(Serializable):
 
     """
 
-    Item = namedtuple("Item", ["priority", "filename"])
+    Item = NamedTuple("Item", [("priority", int), ("filename", str)])
     _state_dict_all_req_keys = ("saved",)
 
     def __init__(
@@ -244,14 +258,14 @@ class Checkpoint(Serializable):
         score_function: Optional[Callable] = None,
         score_name: Optional[str] = None,
         n_saved: Optional[int] = 1,
-        global_step_transform: Callable = None,
+        global_step_transform: Optional[Callable] = None,
         filename_pattern: Optional[str] = None,
         include_self: bool = False,
-    ):
+    ) -> None:
 
         if to_save is not None:  # for compatibility with ModelCheckpoint
             if not isinstance(to_save, collections.Mapping):
-                raise TypeError("Argument `to_save` should be a dictionary, but given {}".format(type(to_save)))
+                raise TypeError(f"Argument `to_save` should be a dictionary, but given {type(to_save)}")
 
             if len(to_save) < 1:
                 raise ValueError("No objects to checkpoint.")
@@ -261,11 +275,11 @@ class Checkpoint(Serializable):
             if include_self:
                 if not isinstance(to_save, collections.MutableMapping):
                     raise TypeError(
-                        "If `include_self` is True, then `to_save` must be mutable, but given {}.".format(type(to_save))
+                        f"If `include_self` is True, then `to_save` must be mutable, but given {type(to_save)}."
                     )
 
                 if "checkpointer" in to_save:
-                    raise ValueError("Cannot have key 'checkpointer' if `include_self` is True: {}".format(to_save))
+                    raise ValueError(f"Cannot have key 'checkpointer' if `include_self` is True: {to_save}")
 
         if not (callable(save_handler) or isinstance(save_handler, BaseSaveHandler)):
             raise TypeError("Argument `save_handler` should be callable or inherit from BaseSaveHandler")
@@ -274,9 +288,7 @@ class Checkpoint(Serializable):
             raise ValueError("If `score_name` is provided, then `score_function` " "should be also provided.")
 
         if global_step_transform is not None and not callable(global_step_transform):
-            raise TypeError(
-                "global_step_transform should be a function, got {} instead.".format(type(global_step_transform))
-            )
+            raise TypeError(f"global_step_transform should be a function, got {type(global_step_transform)} instead.")
 
         self.to_save = to_save
         self.filename_prefix = filename_prefix
@@ -287,8 +299,34 @@ class Checkpoint(Serializable):
         self.ext = "pt"
         self.global_step_transform = global_step_transform
         self.filename_pattern = filename_pattern
-        self._saved = []  # type: list
+        self._saved = []  # type: List["Checkpoint.Item"]
         self.include_self = include_self
+
+    def reset(self) -> None:
+        """Method to reset saved checkpoint names.
+
+        Use this method if the engine will independently run multiple times:
+
+        .. code-block:: python
+
+            from ignite.handlers import Checkpoint
+
+            trainer = ...
+            checkpointer = Checkpoint(...)
+
+            trainer.add_event_handler(Events.COMPLETED, checkpointer)
+            trainer.add_event_handler(Events.STARTED, checkpointer.reset)
+
+            # fold 0
+            trainer.run(data0, max_epochs=max_epochs)
+            print("Last checkpoint:", checkpointer.last_checkpoint)
+
+            # fold 1
+            trainer.run(data1, max_epochs=max_epochs)
+            print("Last checkpoint:", checkpointer.last_checkpoint)
+
+        """
+        self._saved = []
 
     @property
     def last_checkpoint(self) -> Optional[str]:
@@ -296,7 +334,7 @@ class Checkpoint(Serializable):
             return None
         return self._saved[-1].filename
 
-    def _check_lt_n_saved(self, or_equal=False):
+    def _check_lt_n_saved(self, or_equal: bool = False) -> bool:
         if self.n_saved is None:
             return True
         return len(self._saved) < self.n_saved + int(or_equal)
@@ -318,9 +356,7 @@ class Checkpoint(Serializable):
 
         if self._check_lt_n_saved() or self._saved[0].priority < priority:
 
-            priority_str = (
-                "{}".format(priority) if isinstance(priority, numbers.Integral) else "{:.4f}".format(priority)
-            )
+            priority_str = f"{priority}" if isinstance(priority, numbers.Integral) else f"{priority:.4f}"
 
             checkpoint = self._setup_checkpoint()
 
@@ -351,7 +387,7 @@ class Checkpoint(Serializable):
             filename = filename_pattern.format(**filename_dict)
 
             metadata = {
-                "basename": "{}{}{}".format(self.filename_prefix, "_" * int(len(self.filename_prefix) > 0), name),
+                "basename": f"{self.filename_prefix}{'_' * int(len(self.filename_prefix) > 0)}{name}",
                 "score_name": self.score_name,
                 "priority": priority,
             }
@@ -380,7 +416,7 @@ class Checkpoint(Serializable):
             except TypeError:
                 self.save_handler(checkpoint, filename)
 
-    def _setup_checkpoint(self) -> dict:
+    def _setup_checkpoint(self) -> Dict[str, Dict[Any, Any]]:
         checkpoint = {}
         if self.to_save is not None:
             for k, obj in self.to_save.items():
@@ -443,10 +479,10 @@ class Checkpoint(Serializable):
     def _check_objects(objs: Mapping, attr: str) -> None:
         for k, obj in objs.items():
             if not hasattr(obj, attr):
-                raise TypeError("Object {} should have `{}` method".format(type(obj), attr))
+                raise TypeError(f"Object {type(obj)} should have `{attr}` method")
 
     @staticmethod
-    def load_objects(to_load: Mapping, checkpoint: Mapping, **kwargs) -> None:
+    def load_objects(to_load: Mapping, checkpoint: Mapping, **kwargs: Any) -> None:
         """Helper method to apply ``load_state_dict`` on the objects from ``to_load`` using states from ``checkpoint``.
 
         Exemples:
@@ -488,7 +524,7 @@ class Checkpoint(Serializable):
         """
         Checkpoint._check_objects(to_load, "load_state_dict")
         if not isinstance(checkpoint, collections.Mapping):
-            raise TypeError("Argument checkpoint should be a dictionary, but given {}".format(type(checkpoint)))
+            raise TypeError(f"Argument checkpoint should be a dictionary, but given {type(checkpoint)}")
 
         if len(kwargs) > 1 or any(k for k in kwargs.keys() if k not in ["strict"]):
             warnings.warn("kwargs contains keys other than strict and these will be ignored")
@@ -506,7 +542,7 @@ class Checkpoint(Serializable):
         # multiple objects to load
         for k, obj in to_load.items():
             if k not in checkpoint:
-                raise ValueError("Object labeled by '{}' from `to_load` is not found in the checkpoint".format(k))
+                raise ValueError(f"Object labeled by '{k}' from `to_load` is not found in the checkpoint")
             if isinstance(obj, (nn.DataParallel, nn.parallel.DistributedDataParallel)):
                 obj = obj.module
             if isinstance(obj, torch.nn.Module):
@@ -514,7 +550,7 @@ class Checkpoint(Serializable):
             else:
                 obj.load_state_dict(checkpoint[k])
 
-    def state_dict(self) -> OrderedDict:
+    def state_dict(self) -> "OrderedDict[str, List[Tuple[int, str]]]":
         return OrderedDict([("saved", [(p, f) for p, f in self._saved])])
 
     def load_state_dict(self, state_dict: Mapping) -> None:
@@ -537,8 +573,8 @@ class DiskSaver(BaseSaveHandler):
     """
 
     def __init__(
-        self, dirname: str, atomic: bool = True, create_dir: bool = True, require_empty: bool = True, **kwargs
-    ):
+        self, dirname: str, atomic: bool = True, create_dir: bool = True, require_empty: bool = True, **kwargs: Any
+    ) -> None:
         self.dirname = os.path.expanduser(dirname)
         self._atomic = atomic
         self._check_and_setup(dirname, create_dir, require_empty)
@@ -546,22 +582,22 @@ class DiskSaver(BaseSaveHandler):
 
     @staticmethod
     @idist.one_rank_only()
-    def _check_and_setup(dirname, create_dir, require_empty):
+    def _check_and_setup(dirname: str, create_dir: bool, require_empty: bool) -> None:
         if create_dir:
             if not os.path.exists(dirname):
                 os.makedirs(dirname)
         # Ensure that dirname exists
         if not os.path.exists(dirname):
-            raise ValueError("Directory path '{}' is not found".format(dirname))
+            raise ValueError(f"Directory path '{dirname}' is not found")
 
         if require_empty:
             matched = [fname for fname in os.listdir(dirname) if fname.endswith(".pt")]
             if len(matched) > 0:
                 raise ValueError(
-                    "Files {} with extension '.pt' are already present "
-                    "in the directory {}. If you want to use this "
+                    f"Files {matched} with extension '.pt' are already present "
+                    f"in the directory {dirname}. If you want to use this "
                     "directory anyway, pass `require_empty=False`."
-                    "".format(matched, dirname)
+                    ""
                 )
 
     def __call__(self, checkpoint: Mapping, filename: str, metadata: Optional[Mapping] = None) -> None:
@@ -573,16 +609,16 @@ class DiskSaver(BaseSaveHandler):
             self._save_native(checkpoint, path)
 
     @idist.one_rank_only()
-    def _save_native(self, checkpoint: Mapping, path: str):
+    def _save_native(self, checkpoint: Mapping, path: str) -> None:
         self._save_func(checkpoint, path, torch.save)
 
-    def _save_xla(self, checkpoint: Mapping, path: str):
-        import torch_xla.core.xla_model as xm  # type: ignore
+    def _save_xla(self, checkpoint: Mapping, path: str) -> None:
+        import torch_xla.core.xla_model as xm
 
         # all tpu procs should enter here as internally performs sync across device
         self._save_func(checkpoint, path, xm.save, rank=idist.get_rank())
 
-    def _save_func(self, checkpoint: Mapping, path: str, func: Callable, rank: int = 0):
+    def _save_func(self, checkpoint: Mapping, path: str, func: Callable, rank: int = 0) -> None:
         if not self._atomic:
             func(checkpoint, path, **self.kwargs)
         else:
@@ -667,11 +703,11 @@ class ModelCheckpoint(Checkpoint):
         >>> handler = ModelCheckpoint('/tmp/models', 'myprefix', n_saved=2, create_dir=True)
         >>> model = nn.Linear(3, 3)
         >>> trainer.add_event_handler(Events.EPOCH_COMPLETED(every=2), handler, {'mymodel': model})
-        >>> trainer.run([0], max_epochs=6)
+        >>> trainer.run([0, 1, 2, 3, 4], max_epochs=6)
         >>> os.listdir('/tmp/models')
-        ['myprefix_mymodel_4.pt', 'myprefix_mymodel_6.pt']
+        ['myprefix_mymodel_20.pt', 'myprefix_mymodel_30.pt']
         >>> handler.last_checkpoint
-        ['/tmp/models/myprefix_mymodel_6.pt']
+        ['/tmp/models/myprefix_mymodel_30.pt']
     """
 
     def __init__(
@@ -686,8 +722,8 @@ class ModelCheckpoint(Checkpoint):
         create_dir: bool = True,
         global_step_transform: Optional[Callable] = None,
         include_self: bool = False,
-        **kwargs
-    ):
+        **kwargs: Any
+    ) -> None:
 
         disk_saver = DiskSaver(dirname, atomic=atomic, create_dir=create_dir, require_empty=require_empty, **kwargs)
 
@@ -709,7 +745,7 @@ class ModelCheckpoint(Checkpoint):
 
         if not isinstance(self.save_handler, DiskSaver):
             raise RuntimeError(
-                "Unable to save checkpoint, save_handler should be DiskSaver, got {}.".format(type(self.save_handler))
+                f"Unable to save checkpoint, save_handler should be DiskSaver, got {type(self.save_handler)}."
             )
 
         return os.path.join(self.save_handler.dirname, self._saved[-1].filename)

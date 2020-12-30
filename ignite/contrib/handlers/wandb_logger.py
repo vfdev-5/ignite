@@ -1,10 +1,9 @@
-from enum import Enum
 from typing import Any, Callable, List, Optional, Union
 
 from torch.optim import Optimizer
 
 from ignite.contrib.handlers.base_logger import BaseLogger, BaseOptimizerParamsHandler, BaseOutputHandler
-from ignite.engine import CallableEventWithFilter, Engine
+from ignite.engine import Engine, Events
 from ignite.handlers import global_step_from_engine
 
 __all__ = ["WandBLogger", "OutputHandler", "OptimizerParamsHandler", "global_step_from_engine"]
@@ -117,7 +116,7 @@ class WandBLogger(BaseLogger):
             evaluator.add_event_handler(Events.COMPLETED, model_checkpoint, {'model': model})
     """
 
-    def __init__(self, *args: Any, **kwargs: Any):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         try:
             import wandb
 
@@ -130,13 +129,13 @@ class WandBLogger(BaseLogger):
         if kwargs.get("init", True):
             wandb.init(*args, **kwargs)
 
-    def __getattr__(self, attr: Any):
-        return getattr(self._wandb, attr)
+    def __getattr__(self, attr: Any) -> Any:
+        return getattr(self._wandb, attr)  # type: ignore[misc]
 
-    def _create_output_handler(self, *args: Any, **kwargs: Any):
+    def _create_output_handler(self, *args: Any, **kwargs: Any) -> "OutputHandler":
         return OutputHandler(*args, **kwargs)
 
-    def _create_opt_params_handler(self, *args: Any, **kwargs: Any):
+    def _create_opt_params_handler(self, *args: Any, **kwargs: Any) -> "OptimizerParamsHandler":
         return OptimizerParamsHandler(*args, **kwargs)
 
 
@@ -252,25 +251,25 @@ class OutputHandler(BaseOutputHandler):
         output_transform: Optional[Callable] = None,
         global_step_transform: Optional[Callable] = None,
         sync: Optional[bool] = None,
-    ):
+    ) -> None:
         super().__init__(tag, metric_names, output_transform, global_step_transform)
         self.sync = sync
 
-    def __call__(self, engine: Engine, logger: WandBLogger, event_name: Union[CallableEventWithFilter, Enum]):
+    def __call__(self, engine: Engine, logger: WandBLogger, event_name: Union[str, Events]) -> None:
 
         if not isinstance(logger, WandBLogger):
-            raise RuntimeError("Handler '{}' works only with WandBLogger.".format(self.__class__.__name__))
+            raise RuntimeError(f"Handler '{self.__class__.__name__}' works only with WandBLogger.")
 
-        global_step = self.global_step_transform(engine, event_name)
+        global_step = self.global_step_transform(engine, event_name)  # type: ignore[misc]
         if not isinstance(global_step, int):
             raise TypeError(
-                "global_step must be int, got {}."
-                " Please check the output of global_step_transform.".format(type(global_step))
+                f"global_step must be int, got {type(global_step)}."
+                " Please check the output of global_step_transform."
             )
 
         metrics = self._setup_output_metrics(engine)
         if self.tag is not None:
-            metrics = {"{tag}/{name}".format(tag=self.tag, name=name): value for name, value in metrics.items()}
+            metrics = {f"{self.tag}/{name}": value for name, value in metrics.items()}
 
         logger.log(metrics, step=global_step, sync=self.sync)
 
@@ -319,18 +318,18 @@ class OptimizerParamsHandler(BaseOptimizerParamsHandler):
 
     def __init__(
         self, optimizer: Optimizer, param_name: str = "lr", tag: Optional[str] = None, sync: Optional[bool] = None,
-    ):
+    ) -> None:
         super(OptimizerParamsHandler, self).__init__(optimizer, param_name, tag)
         self.sync = sync
 
-    def __call__(self, engine: Engine, logger: WandBLogger, event_name: Union[CallableEventWithFilter, Enum]):
+    def __call__(self, engine: Engine, logger: WandBLogger, event_name: Union[str, Events]) -> None:
         if not isinstance(logger, WandBLogger):
             raise RuntimeError("Handler OptimizerParamsHandler works only with WandBLogger")
 
         global_step = engine.state.get_event_attrib_value(event_name)
-        tag_prefix = "{}/".format(self.tag) if self.tag else ""
+        tag_prefix = f"{self.tag}/" if self.tag else ""
         params = {
-            "{}{}/group_{}".format(tag_prefix, self.param_name, i): float(param_group[self.param_name])
+            f"{tag_prefix}{self.param_name}/group_{i}": float(param_group[self.param_name])
             for i, param_group in enumerate(self.optimizer.param_groups)
         }
         logger.log(params, step=global_step, sync=self.sync)

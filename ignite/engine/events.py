@@ -312,7 +312,7 @@ class EventsList:
 
     def _append(self, event: Union[Events, CallableEventWithFilter]) -> None:
         if not isinstance(event, (Events, CallableEventWithFilter)):
-            raise TypeError("Argument event should be Events or CallableEventWithFilter, got: {}".format(type(event)))
+            raise TypeError(f"Argument event should be Events or CallableEventWithFilter, got: {type(event)}")
         self._events.append(event)
 
     def __getitem__(self, item: int) -> Union[Events, CallableEventWithFilter]:
@@ -349,7 +349,7 @@ class RemovableEventHandle:
         engine = Engine()
 
         def print_epoch(engine):
-            print("Epoch: {}".format(engine.state.epoch))
+            print(f"Epoch: {engine.state.epoch}")
 
         with engine.add_event_handler(Events.EPOCH_COMPLETED, print_epoch):
             # print_epoch handler registered for a single run

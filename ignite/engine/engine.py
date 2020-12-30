@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 import warnings
 from collections import OrderedDict
@@ -53,7 +54,7 @@ class Engine(Serializable, EventsDrivenWithState):
                 e = engine.state.epoch
                 n = engine.state.max_epochs
                 i = engine.state.iteration
-                print("Epoch {}/{} : {} - batch loss: {}, lr: {}".format(e, n, i, batch_loss, lr))
+                print(f"Epoch {e}/{n} : {i} - batch loss: {batch_loss}, lr: {lr}")
 
             trainer.run(data_loader, max_epochs=5)
 
@@ -250,7 +251,7 @@ class Engine(Serializable, EventsDrivenWithState):
             engine = Engine(process_function)
 
             def print_epoch(engine):
-                print("Epoch: {}".format(engine.state.epoch))
+                print(f"Epoch: {engine.state.epoch}")
 
             engine.add_event_handler(Events.EPOCH_COMPLETED, print_epoch)
 
@@ -306,7 +307,7 @@ class Engine(Serializable, EventsDrivenWithState):
 
             @engine.on(Events.EPOCH_COMPLETED)
             def print_epoch():
-                print("Epoch: {}".format(engine.state.epoch))
+                print(f"Epoch: {engine.state.epoch}")
 
             @engine.on(Events.EPOCH_COMPLETED | Events.COMPLETED)
             def execute_something():
@@ -401,7 +402,7 @@ class Engine(Serializable, EventsDrivenWithState):
         If `engine.state_dict_user_keys` contains keys, they should be also present in the state dictionary.
         Iteration and epoch values are 0-based: the first iteration or epoch is zero.
 
-        This method does not remove any custom attributs added by user.
+        This method does not remove any custom attributes added by user.
 
         Args:
             state_dict (Mapping): a dict with parameters
@@ -423,9 +424,7 @@ class Engine(Serializable, EventsDrivenWithState):
         for k in self._state_dict_user_keys:
             if k not in state_dict:
                 raise ValueError(
-                    "Required user state attribute '{}' is absent in provided state_dict '{}'".format(
-                        k, state_dict.keys()
-                    )
+                    f"Required user state attribute '{k}' is absent in provided state_dict '{state_dict.keys()}'"
                 )
         self.state.max_epochs = state_dict["max_epochs"]
         self.state.epoch_length = state_dict["epoch_length"]
@@ -442,13 +441,20 @@ class Engine(Serializable, EventsDrivenWithState):
             if self.state.epoch_length is None:
                 raise ValueError(
                     "If epoch is provided in the state dict, epoch_length should not be None. "
-                    "Input state_dict: {}".format(state_dict)
+                    f"Input state_dict: {state_dict}"
                 )
             self.state.iteration = self.state.epoch_length * self.state.epoch
 
     @staticmethod
     def _is_done(state: State) -> bool:
-        return state.iteration == state.epoch_length * state.max_epochs  # type: ignore[operator]
+        is_done_iters = state.max_iters is not None and state.iteration >= state.max_iters
+        is_done_count = (
+            state.epoch_length is not None
+            and state.max_epochs is not None
+            and state.iteration >= state.epoch_length * state.max_epochs
+        )
+        is_done_epochs = state.max_epochs is not None and state.epoch >= state.max_epochs
+        return is_done_iters or is_done_count or is_done_epochs
 
     def set_data(self, data: Union[Iterable, DataLoader]) -> None:
         """Method to set data. After calling the method the next batch passed to `processing_function` is
@@ -486,13 +492,19 @@ class Engine(Serializable, EventsDrivenWithState):
         self.state.dataloader = data
         self._dataloader_iter = iter(self.state.dataloader)
 
-    def run(self, data: Iterable, max_epochs: Optional[int] = None, epoch_length: Optional[int] = None,) -> State:
+    def run(
+        self,
+        data: Iterable,
+        max_epochs: Optional[int] = None,
+        max_iters: Optional[int] = None,
+        epoch_length: Optional[int] = None,
+    ) -> State:
         """Runs the `process_function` over the passed data.
 
         Engine has a state and the following logic is applied in this function:
 
-        - At the first call, new state is defined by `max_epochs`, `epoch_length` if provided. A timer for
-            total and per-epoch time is initialized when Events.STARTED is handled.
+        - At the first call, new state is defined by `max_epochs`, `max_iters`, `epoch_length`, if provided.
+            A timer for total and per-epoch time is initialized when Events.STARTED is handled.
         - If state is already defined such that there are iterations to run until `max_epochs` and no input arguments
             provided, state is kept and used in the function.
         - If state is defined and engine is "done" (no iterations to run until `max_epochs`), a new state is defined.
@@ -508,6 +520,8 @@ class Engine(Serializable, EventsDrivenWithState):
                 `len(data)`. If `data` is an iterator and `epoch_length` is not set, then it will be automatically
                 determined as the iteration on which data iterator raises `StopIteration`.
                 This argument should not change if run is resuming from a state.
+            max_iters (int, optional): Number of iterations to run for.
+                `max_iters` and `max_epochs` are mutually exclusive; only one of the two arguments should be provided.
 
         Returns:
             State: output state.
@@ -545,39 +559,47 @@ class Engine(Serializable, EventsDrivenWithState):
                 if max_epochs < self.state.epoch:
                     raise ValueError(
                         "Argument max_epochs should be larger than the start epoch "
-                        "defined in the state: {} vs {}. Please, set engine.state.max_epochs = None "
-                        "before calling engine.run() in order to restart the training from the beginning.".format(
-                            max_epochs, self.state.epoch
-                        )
+                        f"defined in the state: {max_epochs} vs {self.state.epoch}. "
+                        "Please, set engine.state.max_epochs = None "
+                        "before calling engine.run() in order to restart the training from the beginning."
                     )
                 self.state.max_epochs = max_epochs
             if epoch_length is not None:
                 if epoch_length != self.state.epoch_length:
                     raise ValueError(
-                        "Argument epoch_length should be same as in the state, given {} vs {}".format(
-                            epoch_length, self.state.epoch_length
-                        )
+                        "Argument epoch_length should be same as in the state, "
+                        f"but given {epoch_length} vs {self.state.epoch_length}"
                     )
 
         if self.state.max_epochs is None or self._is_done(self.state):
             # Create new state
-            if max_epochs is None:
-                max_epochs = 1
             if epoch_length is None:
                 epoch_length = self._get_data_length(data)
                 if epoch_length is not None and epoch_length < 1:
                     raise ValueError("Input data has zero size. Please provide non-empty data")
 
+            if max_iters is None:
+                if max_epochs is None:
+                    max_epochs = 1
+            else:
+                if max_epochs is not None:
+                    raise ValueError(
+                        "Arguments max_iters and max_epochs are mutually exclusive."
+                        "Please provide only max_epochs or max_iters."
+                    )
+                if epoch_length is not None:
+                    max_epochs = math.ceil(max_iters / epoch_length)
+
             self.state.iteration = 0
             self.state.epoch = 0
             self.state.max_epochs = max_epochs
+            self.state.max_iters = max_iters
             self.state.epoch_length = epoch_length
-            self.logger.info("Engine run starting with max_epochs={}.".format(max_epochs))
+            self.logger.info(f"Engine run starting with max_epochs={max_epochs}.")
         else:
             self.logger.info(
-                "Engine run resuming from iteration {}, epoch {} until {} epochs".format(
-                    self.state.iteration, self.state.epoch, self.state.max_epochs
-                )
+                f"Engine run resuming from iteration {self.state.iteration}, "
+                f"epoch {self.state.epoch} until {self.state.max_epochs} epochs"
             )
 
         self.state.dataloader = data
@@ -618,7 +640,7 @@ class Engine(Serializable, EventsDrivenWithState):
         try:
             start_time = time.time()
             self._fire_event(Events.STARTED)
-            while self.state.epoch < self.state.max_epochs and not self.should_terminate:  # type: ignore[operator]
+            while not self._is_done(self.state) and not self.should_terminate:
                 self.state.epoch += 1
                 self._fire_event(Events.EPOCH_STARTED)
 
@@ -692,18 +714,23 @@ class Engine(Serializable, EventsDrivenWithState):
                     if self.state.epoch_length is None:
                         # Define epoch length and stop the epoch
                         self.state.epoch_length = iter_counter
+                        if self.state.max_iters is not None:
+                            self.state.max_epochs = math.ceil(self.state.max_iters / self.state.epoch_length)
                         break
 
                     # Should exit while loop if we can not iterate
                     if should_exit:
                         if not self._is_done(self.state):
+                            total_iters = (
+                                self.state.epoch_length * self.state.max_epochs
+                                if self.state.max_epochs is not None
+                                else self.state.max_iters
+                            )
+
                             warnings.warn(
                                 "Data iterator can not provide data anymore but required total number of "
                                 "iterations to run is not reached. "
-                                "Current iteration: {} vs Total iterations to run : {}".format(
-                                    self.state.iteration,
-                                    self.state.epoch_length * self.state.max_epochs,  # type: ignore[operator]
-                                )
+                                f"Current iteration: {self.state.iteration} vs Total iterations to run : {total_iters}"
                             )
                         break
 
@@ -729,6 +756,10 @@ class Engine(Serializable, EventsDrivenWithState):
                     break
 
                 if self.state.epoch_length is not None and iter_counter == self.state.epoch_length:
+                    break
+
+                if self.state.max_iters is not None and self.state.iteration == self.state.max_iters:
+                    self.should_terminate = True
                     break
 
         except Exception as e:

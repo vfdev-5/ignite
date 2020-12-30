@@ -48,7 +48,7 @@ def apply_to_type(
         return cast(Callable, type(input_))(*(apply_to_type(sample, input_type, func) for sample in input_))
     if isinstance(input_, collections.Sequence):
         return cast(Callable, type(input_))([apply_to_type(sample, input_type, func) for sample in input_])
-    raise TypeError(("input must contain {}, dicts or lists; found {}".format(input_type, type(input_))))
+    raise TypeError((f"input must contain {input_type}, dicts or lists; found {type(input_)}"))
 
 
 def to_onehot(indices: torch.Tensor, num_classes: int) -> torch.Tensor:
@@ -75,7 +75,7 @@ def setup_logger(
         format (str): logging format. By default, `%(asctime)s %(name)s %(levelname)s: %(message)s`
         filepath (str, optional): Optional logging file path. If not None, logs are written to the file.
         distributed_rank (int, optional): Optional, rank in distributed configuration to avoid logger setup for workers.
-        If None, distributed_rank is initialized to the rank of process.
+            If None, distributed_rank is initialized to the rank of process.
 
     Returns:
         logging.Logger
@@ -150,6 +150,10 @@ def manual_seed(seed: int) -> None:
     """
     random.seed(seed)
     torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
     try:
         import numpy as np
 
