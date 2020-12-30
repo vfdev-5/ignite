@@ -1,4 +1,4 @@
-from typing import List, Optional, Union, Mapping
+from typing import List, Mapping, Optional, Union
 
 from ignite.base import EventsDriven, EventsDrivenState, Serializable
 from ignite.engine.events import EventEnum
@@ -54,18 +54,12 @@ def test_events_driven_basics():
 
 
 def test_basic_events_driven_with_state():
-
     class TinyEngine(EventsDriven):
-
         def __init__(self):
             super(TinyEngine, self).__init__()
             self.register_events(*ABCEvents)
             self._state = EventsDrivenState(
-                engine=self, event_to_attr={
-                    ABCEvents.A_EVENT: "a",
-                    ABCEvents.B_EVENT: "b",
-                    ABCEvents.C_EVENT: "c",
-                }
+                engine=self, event_to_attr={ABCEvents.A_EVENT: "a", ABCEvents.B_EVENT: "b", ABCEvents.C_EVENT: "c",}
             )
 
         @property
@@ -124,7 +118,6 @@ def test_basic_events_driven_with_state():
 
 
 def test_events_driven_with_state_mixed_events():
-
     class BCEvents(EventEnum):
         B_EVENT_STARTED = "B_event_started"
         B_EVENT_COMPLETED = "B_event_completed"
@@ -132,15 +125,11 @@ def test_events_driven_with_state_mixed_events():
         C_EVENT_COMPLETED = "C_event_completed"
 
     class AnotherTinyEngine(EventsDriven):
-
         def __init__(self):
             super(AnotherTinyEngine, self).__init__()
             self.register_events(*BCEvents)
             self._state = EventsDrivenState(
-                engine=self, event_to_attr={
-                    BCEvents.B_EVENT_STARTED: "b",
-                    BCEvents.C_EVENT_STARTED: "c",
-                }
+                engine=self, event_to_attr={BCEvents.B_EVENT_STARTED: "b", BCEvents.C_EVENT_STARTED: "c",}
             )
 
         @property

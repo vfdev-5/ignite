@@ -6,7 +6,9 @@ from torch.utils.data import DataLoader
 from ignite.base.mixins import EventsDrivenState
 from ignite.engine.events import Events
 
-__all__ = ["State", ]
+__all__ = [
+    "State",
+]
 
 
 class State(EventsDrivenState):

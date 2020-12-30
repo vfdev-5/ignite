@@ -2,7 +2,7 @@ import functools
 import logging
 import weakref
 from collections import OrderedDict, defaultdict
-from typing import Any, Callable, List, Optional, Union, Mapping, Dict
+from typing import Any, Callable, Dict, List, Mapping, Optional, Union
 
 from ignite.engine.events import CallableEventWithFilter, EventEnum, Events, EventsList, RemovableEventHandle
 from ignite.engine.utils import _check_signature
@@ -225,7 +225,6 @@ class EventsDriven:
 
 
 class EventsDrivenState:
-
     def __init__(
         self, engine: Optional[EventsDriven] = None, event_to_attr: Optional[Mapping[Any, str]] = None, **kwargs: Any
     ):
@@ -262,7 +261,6 @@ class EventsDrivenState:
 
 
 class EventsDrivenWithState(EventsDriven):
-
     def __init__(self):
         super(EventsDrivenWithState, self).__init__()
         self._state = EventsDrivenState(self)
