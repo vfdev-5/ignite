@@ -9,7 +9,7 @@ from ignite.engine.utils import _check_signature
 if TYPE_CHECKING:
     from ignite.base.mixins import EventsDriven
 
-__all__ = ["CallableEventWithFilter", "EventEnum", "Events", ]
+__all__ = ["CallableEventWithFilter", "EventEnum", "Events", "EventsList"]
 
 
 class CallableEventWithFilter:

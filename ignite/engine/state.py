@@ -38,7 +38,7 @@ class State(EventsDrivenState):
         Events.EPOCH_COMPLETED: "epoch",
         Events.STARTED: "epoch",
         Events.COMPLETED: "epoch",
-    }
+    }  # type: Dict[Union[str, "Events", "CallableEventWithFilter"], str]
 
     def __init__(self, **kwargs: Any) -> None:
         super(State, self).__init__(event_to_attr=self.event_to_attr, **kwargs)
@@ -48,6 +48,7 @@ class State(EventsDrivenState):
         # self.epoch = 0
         self.epoch_length = None  # type: Optional[int]
         self.max_epochs = None  # type: Optional[int]
+        self.max_iters = None  # type: Optional[int]
         self.output = None  # type: Optional[int]
         self.batch = None  # type: Optional[int]
         self.metrics = {}  # type: Dict[str, Any]
