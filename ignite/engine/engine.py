@@ -135,7 +135,7 @@ class Engine(Serializable, EventsDrivenWithState):
         self._dataloader_iter = None  # type: Optional[Iterator[Any]]
         self._init_iter = []  # type: List[int]
 
-        self.register_events(*Events)
+        self.register_events(*Events, event_to_attr=State.event_to_attr)
 
         if self._process_function is None:
             raise ValueError("Engine must be given a processing function in order to run.")
@@ -218,11 +218,11 @@ class Engine(Serializable, EventsDrivenWithState):
         """
         super(Engine, self).register_events(*event_names, event_to_attr=event_to_attr)
 
-        for index, e in enumerate(event_names):
-            if event_to_attr and e in event_to_attr:
-                State.event_to_attr[e] = event_to_attr[e]
-        # we need to update state attributes associated with new custom events
-        self.state._update_attrs()
+        # for index, e in enumerate(event_names):
+        #     if event_to_attr and e in event_to_attr:
+        #         State.event_to_attr[e] = event_to_attr[e]
+        # # we need to update state attributes associated with new custom events
+        # self.state._update_attrs()
 
     def add_event_handler(self, event_name: Any, handler: Callable, *args: Any, **kwargs: Any) -> RemovableEventHandle:
         """Add an event handler to be executed when the specified event is fired.

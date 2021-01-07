@@ -1,6 +1,6 @@
 import pytest
 
-from ignite.base import EventsDriven, EventsDrivenState, Serializable
+from ignite.base import EventsDriven, EventsDrivenWithState, EventsDrivenState, Serializable
 from ignite.engine.events import EventEnum
 
 
@@ -11,9 +11,9 @@ def test_load_state_dict():
 
 
 class ABCEvents(EventEnum):
-    A_EVENT = "A_event"
-    B_EVENT = "B_event"
-    C_EVENT = "C_event"
+    A_EVENT = "a_event"
+    B_EVENT = "b_event"
+    C_EVENT = "c_event"
 
 
 def test_events_driven_basics():
@@ -53,24 +53,37 @@ def test_events_driven_basics():
     assert e._allowed_events_counts[ABCEvents.C_EVENT] == 1
 
 
+def test_events_driven_state():
+    state = EventsDrivenState()
+    assert len(state._attr_to_event) == 0
+
+    state.update_mapping(
+        {ABCEvents.A_EVENT: "a", ABCEvents.B_EVENT: "b", ABCEvents.C_EVENT: "c"}
+    )
+    assert len(state._attr_to_event) == 3
+    assert state._attr_to_event["a"] == [ABCEvents.A_EVENT, ]
+    assert state._attr_to_event["b"] == [ABCEvents.B_EVENT, ]
+    assert state._attr_to_event["c"] == [ABCEvents.C_EVENT, ]
+
+    state.update_mapping(
+        {"epoch_started": "epoch", "epoch_completed": "epoch"}
+    )
+    assert state._attr_to_event["epoch"] == ["epoch_started", "epoch_completed"]
+
+
 def test_basic_events_driven_with_state():
 
-    class TinyEngine(EventsDriven):
+    event_to_attr = {
+        ABCEvents.A_EVENT: "a",
+        ABCEvents.B_EVENT: "b",
+        ABCEvents.C_EVENT: "c",
+    }
+
+    class TinyEngine(EventsDrivenWithState):
 
         def __init__(self):
             super(TinyEngine, self).__init__()
-            self.register_events(*ABCEvents)
-            self._state = EventsDrivenState(
-                engine=self, event_to_attr={
-                    ABCEvents.A_EVENT: "a",
-                    ABCEvents.B_EVENT: "b",
-                    ABCEvents.C_EVENT: "c",
-                }
-            )
-
-        @property
-        def state(self):
-            return self._state
+            self.register_events(*ABCEvents, event_to_attr=event_to_attr)
 
         def _check(self):
             assert self.state.a == self._allowed_events_counts[ABCEvents.A_EVENT]
@@ -90,6 +103,11 @@ def test_basic_events_driven_with_state():
                     self._check()
 
     e = TinyEngine()
+
+    for ev, a in event_to_attr.items():
+        assert a in e.state._attr_to_event
+        assert e.state._attr_to_event[a] == [ev, ]
+
     e.run(10, 20)
     assert e.state.a == 1
     assert e.state.b == 10
@@ -128,28 +146,22 @@ def test_basic_events_driven_with_state():
 def test_events_driven_with_state_mixed_events():
 
     class BCEvents(EventEnum):
-        B_EVENT_STARTED = "B_event_started"
-        B_EVENT_COMPLETED = "B_event_completed"
-        C_EVENT_STARTED = "C_event_started"
-        C_EVENT_COMPLETED = "C_event_completed"
+        B_EVENT_STARTED = "b_event_started"
+        B_EVENT_COMPLETED = "b_event_completed"
+        C_EVENT_STARTED = "c_event_started"
+        C_EVENT_COMPLETED = "c_event_completed"
 
-    class AnotherTinyEngine(EventsDriven):
+    class AnotherTinyEngine(EventsDrivenWithState):
 
         def __init__(self):
             super(AnotherTinyEngine, self).__init__()
-            self.register_events(*BCEvents)
-            self._state = EventsDrivenState(
-                engine=self, event_to_attr={
-                    BCEvents.B_EVENT_STARTED: "b",
-                    BCEvents.C_EVENT_STARTED: "c",
-                    BCEvents.B_EVENT_COMPLETED: "b",
-                    BCEvents.C_EVENT_COMPLETED: "c",
-                }
-            )
-
-        @property
-        def state(self):
-            return self._state
+            event_to_attr = {
+                BCEvents.B_EVENT_STARTED: "b",
+                BCEvents.C_EVENT_STARTED: "c",
+                BCEvents.B_EVENT_COMPLETED: "b",
+                BCEvents.C_EVENT_COMPLETED: "c",
+            }
+            self.register_events(*BCEvents, event_to_attr=event_to_attr)
 
         def _check(self):
             assert self.state.b == self._allowed_events_counts[BCEvents.B_EVENT_STARTED]
