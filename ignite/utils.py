@@ -1,11 +1,11 @@
 import collections.abc as collections
 import logging
 import random
-from typing import Any, Callable, Optional, Tuple, Type, Union, cast
+from typing import Any, Callable, Optional, Tuple, Type, Union, cast, Dict
 
 import torch
 
-__all__ = ["convert_tensor", "apply_to_tensor", "apply_to_type", "to_onehot", "setup_logger", "manual_seed"]
+__all__ = ["convert_tensor", "apply_to_tensor", "apply_to_type", "to_onehot", "setup_logger", "manual_seed", "log_metrics"]
 
 
 def convert_tensor(
@@ -160,3 +160,52 @@ def manual_seed(seed: int) -> None:
         np.random.seed(seed)
     except ImportError:
         pass
+
+
+def log_metrics(logger: logging.Logger, epoch: int, elapsed: float, tag: str, metrics: Dict[str, Any]) -> None:
+    """Helper method to quickly log computed metrics with a logger
+
+    Args:
+        logger (Logger): logger to use
+        epoch (int): epoch value to log
+        elapsed (float): elapsed time to compute metrics
+        tag (str): 
+
+    Example of usage:
+
+    .. code-block:: python
+
+        @trainer.on(Events.EPOCH_COMPLETED)
+        def run_validation():
+            epoch = trainer.state.epoch
+            state = train_evaluator.run(train_eval_loader)
+            log_metrics(logger, epoch, state.times["COMPLETED"], "Train", state.metrics)
+            state = evaluator.run(val_loader)
+            log_metrics(logger, epoch, state.times["COMPLETED"], "Test", state.metrics)
+
+    .. code-block:: text
+
+        TODO: OUTPUT
+
+    """
+    def log_tensor(t: Any) -> None:
+
+        if not isinstance(t, torch.Tensor):
+            return f"{t}"
+
+        print_opts = torch._tensor_str.PRINT_OPTS
+        torch.set_printoptions(precision=3, sci_mode=False)
+        output = None
+
+        if t.ndim < 2:
+            output = f"{t.cpu().tolist()}"
+        elif t.ndim == 2:
+            output = f"\n{t.cpu().numpy()}"
+        else:
+            output = f"{t.cpu()}"
+
+        torch.set_printoptions(precision=print_opts.precision, sci_mode=print_opts.sci_mode)
+        return output
+
+    metrics_vals = "\n".join([f"\t{k}: {log_tensor(v)}" for k, v in metrics.items()])
+    logger.info(f"\nEpoch {epoch} - Evaluation time (seconds): {int(elapsed)} - {tag} metrics:\n\n {metrics_vals}\n")

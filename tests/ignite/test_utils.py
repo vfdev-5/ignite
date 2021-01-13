@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from ignite.engine import Engine, Events
-from ignite.utils import convert_tensor, setup_logger, to_onehot
+from ignite.utils import convert_tensor, setup_logger, to_onehot, log_metrics
 
 
 def test_convert_tensor():
@@ -116,3 +116,24 @@ def test_setup_logger(capsys, dirname):
 
     # Needed by windows to release FileHandler in the loggers
     logging.shutdown()
+
+
+def test_log_metrics(capsys):
+
+    logger = setup_logger(name="test_log_metrics")
+
+    trainer = Engine(lambda e, b: None)
+    evaluator = Engine(lambda e, b: None)
+
+    @trainer.on(Events.EPOCH_COMPLETED(once=3))
+    def run_validation():
+        epoch = trainer.state.epoch
+        state = evaluator.run([0, 1, 2])
+        state.metrics = {
+            "Accuracy": 0.95123454, "Precision": torch.rand(10), "Recall": torch.rand(10), "CM": torch.rand(10, 10)
+        }
+        log_metrics(logger, epoch, state.times["COMPLETED"], "Train", state.metrics)
+
+    trainer.run([0, 1, 2, 3, 4, 5], max_epochs=5)
+
+    assert False
