@@ -35,11 +35,14 @@ class EventsDriven:
 
     """
     def __init__(self) -> None:
-        # Add auto events registering feature ?
-        self._event_handlers = defaultdict(list)  # type: Dict[Any, List]
-        self._allowed_events = []  # type: List[EventEnum]
-        self._allowed_events_counts = defaultdict(int)  # type: Dict[Any, int]
-        self.last_event_name = None  # type: Optional[Events]
+        # TODO: Add auto events registering feature ?
+        self._event_handlers = defaultdict(list)  # type: Dict[Union[str, EventEnum], List]
+
+        # TODO: it is better to have a single attribute instead of 2 which can diverge
+        self._allowed_events = []  # type: List[Union[str, EventEnum]]
+        self._allowed_events_counts = defaultdict(int)  # type: Dict[Union[str, EventEnum], int]
+
+        self.last_event_name = None  # type: Optional[Union[str, EventEnum]]
         self.logger = logging.getLogger(__name__ + "." + self.__class__.__name__)
 
     def register_events(
@@ -61,6 +64,7 @@ class EventsDriven:
                     "Value at {} of event_names should be a str or EventEnum, but given {}".format(index, e)
                 )
             self._allowed_events.append(e)
+            self._allowed_events_counts[e] = 0
 
     def _handler_wrapper(self, handler: Callable, event_name: Any, event_filter: Callable) -> Callable:
         # signature of the following wrapper will be inspected during registering to check if engine is necessary
@@ -74,6 +78,11 @@ class EventsDriven:
         # setup input handler as parent to make has_event_handler work
         setattr(wrapper, "_parent", weakref.ref(handler))
         return wrapper
+
+    def _assert_allowed_event(self, event_name):
+        if event_name not in self._allowed_events:
+            self.logger.error(f"attempt to add event handler to an invalid event {event_name}")
+            raise ValueError(f"Event {event_name} is not a valid event for this {self.__class__.__name__}.")
 
     def add_event_handler(self, event_name: Any, handler: Callable, *args: Any, **kwargs: Any) -> RemovableEventHandle:
         """Add an event handler to be executed when the specified event is fired.
@@ -99,9 +108,7 @@ class EventsDriven:
             event_filter = event_name.filter
             handler = self._handler_wrapper(handler, event_name, event_filter)
 
-        if event_name not in self._allowed_events:
-            self.logger.error("attempt to add event handler to an invalid event %s.", event_name)
-            raise ValueError("Event {} is not a valid event for this {}.".format(event_name, self.__class__.__name__))
+        self._assert_allowed_event(event_name)
 
         event_args = (Exception(),) if event_name == Events.EXCEPTION_RAISED else ()
         try:
@@ -110,7 +117,7 @@ class EventsDriven:
         except ValueError:
             _check_signature(handler, "handler", *(event_args + args), **kwargs)
             self._event_handlers[event_name].append((handler, args, kwargs))
-        self.logger.debug("added handler for event %s.", event_name)
+        self.logger.debug(f"added handler for event {event_name}")
 
         return RemovableEventHandle(event_name, handler, self)
 
@@ -202,14 +209,13 @@ class EventsDriven:
             **event_kwargs: optional keyword args to be passed to all handlers.
 
         """
-        if event_name in self._allowed_events:
-            self.logger.debug("firing handlers for event %s ", event_name)
-            self.last_event_name = event_name
-            self._allowed_events_counts[event_name] += 1
-            for func, args, kwargs in self._event_handlers[event_name]:
-                kwargs.update(event_kwargs)
-                first, others = ((args[0],), args[1:]) if (args and args[0] == self) else ((), args)
-                func(*first, *(event_args + others), **kwargs)
+        self.logger.debug(f"firing handlers for event {event_name}")
+        self.last_event_name = event_name
+        self._allowed_events_counts[event_name] += 1
+        for func, args, kwargs in self._event_handlers[event_name]:
+            kwargs.update(event_kwargs)
+            first, others = ((args[0],), args[1:]) if (args and args[0] == self) else ((), args)
+            func(*first, *(event_args + others), **kwargs)
 
     def fire_event(self, event_name: Any) -> None:
         """Execute all the handlers associated with given event.
@@ -219,6 +225,7 @@ class EventsDriven:
                 events are from :class:`~ignite.engine.events.Events` or any `event_name` added by
                 :meth:`~ignite.base.mixins.EventsDriven.register_events`.
         """
+        self._assert_allowed_event(event_name)
         return self._fire_event(event_name)
 
     def _reset_allowed_events_counts(self) -> None:
@@ -243,17 +250,19 @@ class EventsDrivenState:
             # It is possible to setup event_to_attr using already registered events
             pass
 
+        # Defined as below self.event_to_attr wont be sync with self._attr_to_events
+        # And maybe there is no purpose to define self.event_to_attr
         # self.event_to_attr = event_to_attr  # type: Optional[Mapping[Any, str]]
 
-        self._attr_to_event = defaultdict(list)  # type: Mapping[str, Any]
+        self._attr_to_events = defaultdict(list)  # type: Mapping[str, Any]
         if event_to_attr is not None:
             for k, v in event_to_attr.items():
-                self._attr_to_event[v].append(k)
+                self._attr_to_events[v].append(k)
 
     def __getattr__(self, attr: str) -> Any:
         evnts = None
-        if attr in self._attr_to_event:
-            evnts = self._attr_to_event[attr]
+        if attr in self._attr_to_events:
+            evnts = self._attr_to_events[attr]
 
         if self.engine and evnts:
             # return max of available event counts
@@ -263,16 +272,16 @@ class EventsDrivenState:
         raise AttributeError("'{}' object has no attribute '{}'".format(self.__class__.__name__, attr))
 
     def __setattr__(self, attr: str, value: Any) -> None:
-        if all([a in self.__dict__ for a in ["engine", "_attr_to_event"]]) and self.__dict__["engine"]:
-            self__attr_to_event = self.__dict__["_attr_to_event"]
+        if all([a in self.__dict__ for a in ["engine", "_attr_to_events"]]) and self.__dict__["engine"]:
+            self__attr_to_events = self.__dict__["_attr_to_events"]
             evnts = None
-            if attr in self__attr_to_event:
-                evnts = self__attr_to_event[attr]
+            if attr in self__attr_to_events:
+                evnts = self__attr_to_events[attr]
             self_engine = self.__dict__["engine"]
             if self_engine and evnts:
                 # Set all counters to provided value
                 for e in evnts:
-                    if e in self_engine._allowed_events_counts:
+                    if e in self_engine._allowed_events:
                         self_engine._allowed_events_counts[e] = value
                 return
 
@@ -280,30 +289,6 @@ class EventsDrivenState:
 
     def update_mapping(self, event_to_attr: Mapping[Any, str]) -> None:
         for k, v in event_to_attr.items():
-            self._attr_to_event[v].append(k)
-
-
-class EventsDrivenWithState(EventsDriven):
-    """Base class for events-driven engines with state.
-    """
-
-    def __init__(self) -> None:
-        super(EventsDrivenWithState, self).__init__()
-        self._state = EventsDrivenState(engine=self)
-
-    @property
-    def state(self) -> EventsDrivenState:
-        return self._state
-
-    def register_events(
-        self, *event_names: Union[List[str], List[EventEnum]], event_to_attr: Optional[Mapping] = None
-    ) -> None:
-        """Add events that can be fired.
-
-        Args:
-            *event_names (iterable): Defines the name of the event being supported. New events can be a str
-                or an object derived from :class:`~ignite.engine.events.EventEnum`.
-            event_to_attr (dict, optional): A dictionary to map an event to a state attribute.
-        """
-        super(EventsDrivenWithState, self).register_events(*event_names)
-        self._state.update_mapping(event_to_attr)
+            attr_evnts = self._attr_to_events[v]
+            if k not in attr_evnts:
+                attr_evnts.append(k)

@@ -41,7 +41,7 @@ class State(EventsDrivenState):
     }  # type: Dict[Union[str, "Events", "CallableEventWithFilter"], str]
 
     def __init__(self, **kwargs: Any) -> None:
-        super(State, self).__init__(event_to_attr=self.event_to_attr, **kwargs)
+        super(State, self).__init__(**kwargs)
 
         # These attributes are automatically set with Engine
         # self.iteration = 0

@@ -1,7 +1,24 @@
 import pytest
 
-from ignite.base import EventsDriven, EventsDrivenWithState, EventsDrivenState, Serializable
+from ignite.base import EventsDriven, EventsDrivenState, Serializable
 from ignite.engine.events import EventEnum
+
+
+class EventsDrivenWithState(EventsDriven):
+
+    def __init__(self) -> None:
+        super(EventsDrivenWithState, self).__init__()
+        self._state = EventsDrivenState(engine=self)
+
+    @property
+    def state(self) -> EventsDrivenState:
+        return self._state
+
+    def register_events(
+        self, *event_names, event_to_attr=None
+    ) -> None:
+        super(EventsDrivenWithState, self).register_events(*event_names)
+        self._state.update_mapping(event_to_attr)
 
 
 def test_load_state_dict():
@@ -55,20 +72,23 @@ def test_events_driven_basics():
 
 def test_events_driven_state():
     state = EventsDrivenState()
-    assert len(state._attr_to_event) == 0
+    assert len(state._attr_to_events) == 0
 
     state.update_mapping(
         {ABCEvents.A_EVENT: "a", ABCEvents.B_EVENT: "b", ABCEvents.C_EVENT: "c"}
     )
-    assert len(state._attr_to_event) == 3
-    assert state._attr_to_event["a"] == [ABCEvents.A_EVENT, ]
-    assert state._attr_to_event["b"] == [ABCEvents.B_EVENT, ]
-    assert state._attr_to_event["c"] == [ABCEvents.C_EVENT, ]
+    state.update_mapping(
+        {ABCEvents.A_EVENT: "a", ABCEvents.B_EVENT: "b", ABCEvents.C_EVENT: "c"}
+    )
+    assert len(state._attr_to_events) == 3
+    assert state._attr_to_events["a"] == [ABCEvents.A_EVENT, ]
+    assert state._attr_to_events["b"] == [ABCEvents.B_EVENT, ]
+    assert state._attr_to_events["c"] == [ABCEvents.C_EVENT, ]
 
     state.update_mapping(
         {"epoch_started": "epoch", "epoch_completed": "epoch"}
     )
-    assert state._attr_to_event["epoch"] == ["epoch_started", "epoch_completed"]
+    assert state._attr_to_events["epoch"] == ["epoch_started", "epoch_completed"]
 
 
 def test_basic_events_driven_with_state():
@@ -105,8 +125,8 @@ def test_basic_events_driven_with_state():
     e = TinyEngine()
 
     for ev, a in event_to_attr.items():
-        assert a in e.state._attr_to_event
-        assert e.state._attr_to_event[a] == [ev, ]
+        assert a in e.state._attr_to_events
+        assert e.state._attr_to_events[a] == [ev, ]
 
     e.run(10, 20)
     assert e.state.a == 1

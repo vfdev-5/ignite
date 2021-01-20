@@ -9,7 +9,7 @@ from typing import Any, Callable, Iterable, Iterator, List, Optional, Tuple, Uni
 from torch.utils.data import DataLoader
 
 from ignite._utils import _to_hours_mins_secs
-from ignite.base import EventsDrivenWithState, Serializable
+from ignite.base import EventsDriven, Serializable
 from ignite.engine.events import EventEnum, Events, RemovableEventHandle
 from ignite.engine.state import State
 from ignite.engine.utils import _check_signature
@@ -17,7 +17,7 @@ from ignite.engine.utils import _check_signature
 __all__ = ["Engine"]
 
 
-class Engine(Serializable, EventsDrivenWithState):
+class Engine(Serializable, EventsDriven):
     """Runs a given ``process_function`` over each batch of a dataset, emitting events as it goes.
 
     Args:
@@ -129,7 +129,7 @@ class Engine(Serializable, EventsDrivenWithState):
         self.should_terminate_single_epoch = False
 
         # self.state is accessible via EventsDrivenWithState.state property
-        self._state = State(engine=self)
+        self._state = State(engine=self)  # type: State
         self._state_dict_user_keys = []  # type: List[str]
 
         self._dataloader_iter = None  # type: Optional[Iterator[Any]]
@@ -141,6 +141,10 @@ class Engine(Serializable, EventsDrivenWithState):
             raise ValueError("Engine must be given a processing function in order to run.")
 
         _check_signature(process_function, "process_function", self, None)
+
+    @property
+    def state(self) -> State:
+        return self._state
 
     def register_events(
         self, *event_names: Union[List[str], List[EventEnum]], event_to_attr: Optional[dict] = None
@@ -216,7 +220,8 @@ class Engine(Serializable, EventsDrivenWithState):
             engine.run(data)
             # engine.state contains an attribute time_iteration, which can be accessed using engine.state.time_iteration
         """
-        super(Engine, self).register_events(*event_names, event_to_attr=event_to_attr)
+        super(Engine, self).register_events(*event_names)
+        self._state.update_mapping(event_to_attr)
 
         # for index, e in enumerate(event_names):
         #     if event_to_attr and e in event_to_attr:
@@ -592,6 +597,11 @@ class Engine(Serializable, EventsDrivenWithState):
 
             self.state.iteration = 0
             self.state.epoch = 0
+            # # This will reset everything and custom event counters too -> state.custom_attribute
+            # # Is it OK ?
+            # # Cross-Val use-case with events on fold will be reset too ?
+            # self._reset_allowed_events_counts()
+
             self.state.max_epochs = max_epochs
             self.state.max_iters = max_iters
             self.state.epoch_length = epoch_length
@@ -635,13 +645,12 @@ class Engine(Serializable, EventsDrivenWithState):
 
     def _internal_run(self) -> State:
         self.should_terminate = self.should_terminate_single_epoch = False
-        self._reset_allowed_events_counts()
         self._init_timers(self.state)
         try:
             start_time = time.time()
             self._fire_event(Events.STARTED)
             while not self._is_done(self.state) and not self.should_terminate:
-                self.state.epoch += 1
+                # self.state.epoch += 1
                 self._fire_event(Events.EPOCH_STARTED)
 
                 if self._dataloader_iter is None:
@@ -741,7 +750,7 @@ class Engine(Serializable, EventsDrivenWithState):
 
                     continue
 
-                self.state.iteration += 1
+                # self.state.iteration += 1
                 self._fire_event(Events.ITERATION_STARTED)
                 self.state.output = self._process_function(self, self.state.batch)
                 self._fire_event(Events.ITERATION_COMPLETED)

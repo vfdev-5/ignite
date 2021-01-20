@@ -27,7 +27,8 @@ class IterationCounter:
         self.current_iteration_count = start_value
 
     def __call__(self, engine):
-        assert engine.state.iteration == self.current_iteration_count
+        assert engine.state.iteration == self.current_iteration_count, \
+            f"{engine.state.iteration} vs {self.current_iteration_count}"
         self.current_iteration_count += 1
 
 
@@ -36,7 +37,8 @@ class EpochCounter:
         self.current_epoch_count = start_value
 
     def __call__(self, engine):
-        assert engine.state.epoch == self.current_epoch_count
+        assert engine.state.epoch == self.current_epoch_count, \
+            f"{engine.state.epoch} vs {self.current_epoch_count}"
         self.current_epoch_count += 1
 
 
