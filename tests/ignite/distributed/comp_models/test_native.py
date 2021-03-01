@@ -330,3 +330,44 @@ def test__native_dist_model_spawn_gloo():
 @pytest.mark.skipif(torch.cuda.device_count() < 1, reason="Skip if no GPU")
 def test__native_dist_model_spawn_nccl():
     _test__native_dist_model_spawn("nccl", num_workers_per_machine=torch.cuda.device_count(), device="cuda")
+
+
+def _test__native_dist_model_set_dp_group(local_rank, rank, world_size, true_backend, true_device):
+
+    assert _NativeDistModel.create_from_context() is None
+    assert world_size >= 4
+
+    dist.init_process_group(true_backend, "tcp://0.0.0.0:2222", world_size=world_size, rank=rank)
+    dist.barrier()
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+
+    _NativeDistModel._ext_local_rank = local_rank
+    model = _NativeDistModel.create_from_context()
+
+    def _test_dp_allreduce(ranks, group):
+        if group is not None:
+            model.set_dp_group(group=group)
+            assert model._dp_group == group
+        else:
+            model.set_dp_group(ranks=ranks)
+            assert model._dp_group != dist.GroupMember.WORLD
+
+        # data = 2.0 | 3.0 | 4.0 | 5.0
+        data = torch.tensor([dist.get_rank() + 2.0], device=true_device)
+        output = model._do_all_reduce(data)
+        if dist.get_rank() in ranks:
+            assert output.item() == sum([2.0 + r for r in ranks]), f"{ranks}, {group}"
+        else:
+            assert output.item() == data.item()
+
+    for ranks in [[0, 2], [0, 1], [2, 3]]:
+        _test_dp_allreduce(ranks, None)
+        _test_dp_allreduce(ranks, dist.new_group(ranks=ranks))
+
+    dist.destroy_process_group()
+
+
+@pytest.mark.distributed
+def test__native_dist_model_set_dp_group(local_rank, world_size):
+    _test__native_dist_model_set_dp_group(local_rank, local_rank, world_size, "gloo", "cpu")

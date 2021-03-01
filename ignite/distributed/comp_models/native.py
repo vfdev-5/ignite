@@ -64,6 +64,8 @@ if has_native_dist_support:
             else:
                 self._init_from_context()
 
+            self._dp_group = dist.GroupMember.WORLD
+
         def _create_from_backend(self, backend: str, timeout: Optional[int] = None, **kwargs: Any) -> None:
             if backend == dist.Backend.NCCL and not torch.cuda.is_available():
                 raise RuntimeError("Nccl backend is required but no cuda capable devices")
@@ -332,19 +334,31 @@ if has_native_dist_support:
             if op not in self._reduce_op_map:
                 raise ValueError(f"Unsupported reduction operation: '{op}'")
             reduce_op = self._reduce_op_map[op]
-            dist.all_reduce(tensor, reduce_op)
+            dist.all_reduce(tensor, reduce_op, group=self._dp_group)
             return tensor
 
         def _do_all_gather(self, tensor: torch.Tensor) -> torch.Tensor:
             if tensor.ndimension() == 0:
                 tensor = tensor.unsqueeze(0)
             output = [torch.zeros_like(tensor) for _ in range(self.get_world_size())]
-            dist.all_gather(output, tensor)
+            dist.all_gather(output, tensor, group=self._dp_group)
             return torch.cat(output, dim=0)
 
         def _do_broadcast(self, tensor: torch.Tensor, src: int) -> torch.Tensor:
-            dist.broadcast(tensor, src=src)
+            dist.broadcast(tensor, src=src, group=self._dp_group)
             return tensor
 
         def barrier(self) -> None:
-            dist.barrier()
+            dist.barrier(group=self._dp_group)
+
+        def set_dp_group(self, ranks: Optional[List[int]] = None, group: Optional[Any] = None) -> None:
+            if (ranks is not None and group is not None) or (ranks is None and group is None):
+                raise ValueError("Please, specify either ranks or group, not both")
+            if group is not None:
+                # TODO: Should we assert group type ?
+                # torch.distributed.ProcessGroupNCCL,
+                # torch.distributed.ProcessGroupGloo,
+                # torch.distributed.ProcessGroupMPI,
+                self._dp_group = group
+            else:
+                self._dp_group = dist.new_group(ranks=ranks)

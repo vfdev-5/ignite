@@ -14,12 +14,16 @@ class ComputationModel(metaclass=ABCMeta):
 
     # this is an additional local rank storage used when idist is setup from existing native torch dist context
     _ext_local_rank = None  # type: Optional[int]
+    _ext_dp_ranks_or_group = None  # type: Optional[Any]
+    _collective_op_dtype = None  # type: Optional[Any]
+    _can_create_new_group = True  # type: bool
 
     def __init__(self) -> None:
         self._backend = None  # type: Optional[str]
         self._nproc_per_node = None  # type: Optional[int]
         self._nnodes = None  # type: Optional[int]
         self._node = None  # type: Optional[int]
+        self._dp_group = None  # type: Optional[Any]
 
     def _setup_attrs(self) -> None:
         if self._nproc_per_node is None:
@@ -83,8 +87,6 @@ class ComputationModel(metaclass=ABCMeta):
     @abstractmethod
     def spawn(*args: Any, **kwargs: Any) -> None:
         pass
-
-    _collective_op_dtype = None  # type: Any
 
     @staticmethod
     def _encode_str(x: str, device: torch.device, size: int) -> torch.Tensor:
@@ -216,6 +218,13 @@ class ComputationModel(metaclass=ABCMeta):
     def barrier(self) -> None:
         pass
 
+    @abstractmethod
+    def set_dp_group(self, ranks: List[int], group: Any = None) -> None:
+        pass
+
+    def get_dp_group(self) -> Optional[Any]:
+        return self._dp_group
+
 
 class _SerialModel(ComputationModel):
     """Private class defines non-distributed computation model for code compatibility with other distributed models.
@@ -223,6 +232,7 @@ class _SerialModel(ComputationModel):
 
     name = "serial"
     available_backends = ()
+    _can_create_new_group = False
 
     def __init__(self, _backend: Optional[str] = None, **kwargs: Any) -> None:
         super(_SerialModel, self).__init__()
@@ -292,4 +302,7 @@ class _SerialModel(ComputationModel):
         return tensor
 
     def barrier(self) -> None:
+        pass
+
+    def set_dp_group(self, ranks: List[int], group: Any = None) -> None:
         pass

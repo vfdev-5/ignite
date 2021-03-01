@@ -40,6 +40,7 @@ __all__ = [
     "sync",
     "registered_computation_models",
     "one_rank_only",
+    "set_dp_group",
 ]
 
 _model = _SerialModel()
@@ -574,3 +575,25 @@ def one_rank_only(rank: int = 0, with_barrier: bool = False) -> Callable:
         return wrapper
 
     return _one_rank_only
+
+
+def set_dp_group(ranks: Optional[List[int]] = None, group: Optional[Any] = None) -> None:
+    """Helper method to set data parallel group.
+    TODO: Say why we need this etc
+    """
+
+    if (ranks is not None and group is not None) or (ranks is None and group is None):
+        raise ValueError("Please, specify either ranks or group, not both")
+
+    # TODO: assert values
+    # if not isinstance(ranks, list)
+
+    # TODO: assert backend supports dp group assignment
+
+    if _need_to_sync and isinstance(_model, _SerialModel):
+        sync(temporary=True)
+
+    if not _model._can_create_new_group:
+        raise RuntimeError("TODO")
+
+    _model.set_dp_group(ranks=ranks, group=group)
