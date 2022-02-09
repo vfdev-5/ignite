@@ -14,6 +14,7 @@
 #
 import os
 import sys
+import shutil
 
 sys.path.insert(0, os.path.abspath("../.."))
 from datetime import datetime
@@ -59,7 +60,18 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.autosectionlabel",
     "sphinx_copybutton",
+    "sphinx_togglebutton",
 ]
+
+# toggle button hint text
+togglebutton_hint = "Show default setup"
+togglebutton_hint_hide = "Hide default setup"
+
+# Copy defaults.rst to source/generated to discoverable in docstrings
+src_folder = os.path.dirname(__file__)
+gen_folder = os.path.join(src_folder, "generated")
+os.makedirs(gen_folder, exist_ok=True)
+shutil.copy(os.path.join(src_folder, "defaults.rst"), gen_folder)
 
 # katex options
 katex_prerender = True

@@ -117,6 +117,10 @@ class Accuracy(_BaseClassification):
 
     Examples:
 
+        .. toggle::
+
+            .. include:: defaults.rst
+
         Binary case
 
         .. testcode:: 1
