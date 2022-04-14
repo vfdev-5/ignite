@@ -1,0 +1,7 @@
+pytorch-ignite
+torchvision
+fire
+pycocotools
+albumentations
+tensorboard
+clearml

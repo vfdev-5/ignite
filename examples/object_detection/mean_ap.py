@@ -198,7 +198,7 @@ class CocoMetric(Metric):
         super().__init__(*args, **kwargs)
 
     def update(self, output):
-        y_pred, y = output["y_pred"], output["y"]
+        y_pred, y = output[0], output[1]
         res = {target["image_id"]: output for target, output in zip(y, y_pred)}
         self.coco_evaluator.update(res)
 

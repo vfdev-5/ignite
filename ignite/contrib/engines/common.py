@@ -73,8 +73,8 @@ def setup_common_training_handlers(
             each 1000 iterations.
         output_path: output path to indicate where `to_save` objects are stored. Argument is mutually
             exclusive with ``save_handler``.
-        lr_scheduler: learning rate scheduler
-            as native torch LRScheduler or ignite's parameter scheduler.
+        lr_scheduler: learning rate scheduler as native torch LRScheduler or ignite's parameter
+            scheduler and invoked every iteration (not epoch!).
         with_gpu_stats: if True, :class:`~ignite.contrib.metrics.GpuInfo` is attached to the
             trainer. This requires `pynvml` package to be installed.
         output_names: list of names associated with `update_function` output dictionary.
