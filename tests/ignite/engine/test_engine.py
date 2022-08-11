@@ -191,6 +191,38 @@ def test_terminate_stops_run_mid_epoch(data, epoch_length):
         assert engine.state.iteration == first_epoch_iter[1]
 
     if data is not None:
+        expected_data_iter = iter(data)
+        expected_iter = state.iteration
+
+        @engine.on(Events.ITERATION_STARTED)
+        def check_iter_and_data():
+            nonlocal expected_data_iter, expected_iter
+
+            expected_iter += 1
+            assert engine.state.iteration == expected_iter
+
+            try:
+                assert engine.state.batch == next(expected_data_iter)
+            except StopIteration:
+                expected_data_iter = iter(data)
+                assert engine.state.batch == next(expected_data_iter)
+
+    first_epoch_iter[0], first_epoch_iter[1] = state.epoch, state.iteration
+    state = engine.run(data, max_epochs=max_epochs, epoch_length=epoch_length)
+
+    assert state.epoch == max_epochs
+    assert not engine.should_terminate
+    assert state.iteration == real_epoch_length * (max_epochs - 1)
+
+    # Engine continue from epoch_to_terminate_on until max_epochs
+    first_epoch_iter = [None, None]
+
+    @engine.on(Events.STARTED, first_epoch_iter)
+    def check_iter_epoch(first_epoch_iter):
+        assert engine.state.epoch == first_epoch_iter[0]
+        assert engine.state.iteration == first_epoch_iter[1]
+
+    if data is not None:
         expected_iter = state.iteration
 
         @engine.on(Events.ITERATION_STARTED)
