@@ -1223,3 +1223,69 @@ def test_engine_run_resume(data, epoch_length):
     engine.run(data, max_epochs=10, epoch_length=epoch_length)
     assert engine.state.epoch == 10
     assert engine.state.iteration == 10 * real_epoch_length
+
+
+@pytest.mark.parametrize(
+    "interupt_event, e, i",
+    [
+        (Events.EPOCH_STARTED(once=2), 2, None),
+        (Events.EPOCH_COMPLETED(once=2), 2, None),
+        (Events.GET_BATCH_STARTED(once=12), None, 12),
+        (Events.GET_BATCH_COMPLETED(once=12), None, 12),
+        (Events.ITERATION_STARTED(once=14), None, 14),
+        (Events.ITERATION_COMPLETED(once=14), None, 14),
+    ],
+)
+def test_engine_run_interupt_resume(interupt_event, e, i):
+    data = range(10)
+    max_epochs = 5
+
+    def check_input_data(e, b):
+        i = (e.state.iteration - 1) % len(data)
+        assert b == data[i]
+
+    engine = RecordedEngine(check_input_data)
+
+    @engine.on(interupt_event)
+    def call_interupt():
+        engine.interupt()
+
+    state = engine.run(data, max_epochs=max_epochs)
+
+    if i is None:
+        if interupt_event == Events.EPOCH_STARTED:
+            i = len(data) * (e - 1)
+        else:
+            i = len(data) * e
+
+    if e is None:
+        e = i // len(data) + 1
+
+    # Check the last events
+    assert engine.called_events[-1] == (e, i, Events.INTERUPT)
+    assert engine.called_events[-2] == (e, i, interupt_event)
+    assert state.epoch == e
+    assert state.iteration == i
+
+    engine.called_events = []
+
+    first_epoch_iter = [None, None]
+
+    @engine.on(Events.STARTED, first_epoch_iter)
+    def check_iter_epoch(first_epoch_iter):
+        assert engine.state.epoch == first_epoch_iter[0]
+        assert engine.state.iteration == first_epoch_iter[1]
+
+
+    # @engine.on(Events.ITERATION_STARTED)
+    # def check_iter_and_data():
+    #     nonlocal expected_iter
+
+    #     expected_iter += 1
+    #     assert engine.state.iteration == expected_iter
+    #     assert engine.state.batch == data[(expected_iter - first_epoch_iter[1] - 1) % len(data)]
+
+    engine.run(data, max_epochs=max_epochs)
+
+    # Check the first and the last events
+    # ...
