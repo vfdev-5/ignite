@@ -549,3 +549,13 @@ def test_list_of_events():
     _test(Events.ITERATION_STARTED(once=1) | Events.ITERATION_STARTED(once=1), [1, 1])
     _test(Events.ITERATION_STARTED(once=1) | Events.ITERATION_STARTED(once=10), [1, 10])
     _test(Events.ITERATION_STARTED(once=1) | Events.ITERATION_STARTED(every=3), [1, 3, 6, 9, 12, 15])
+
+
+def test_event_name_eq_event():
+    events = [
+        Events.STARTED, Events.COMPLETED, Events.ITERATION_STARTED, Events.ITERATION_COMPLETED,
+        Events.EPOCH_STARTED, Events.EPOCH_COMPLETED, Events.GET_BATCH_STARTED, Events.GET_BATCH_COMPLETED,
+        Events.DATALOADER_STOP_ITERATION, Events.TERMINATE, Events.TERMINATE_SINGLE_EPOCH, Events.INTERRUPT,
+    ]
+    for e in events:
+        assert e.name == e, e

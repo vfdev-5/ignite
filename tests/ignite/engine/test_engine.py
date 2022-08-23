@@ -1291,8 +1291,13 @@ def test_engine_run_interrupt_resume(interrupt_event, e, i):
         i = (e.state.iteration - 1) % len(data)
         assert b == data[i]
 
+    # Register events on a run without interruption
     engine = RecordedEngine(check_input_data)
+    engine.run(data, max_epochs=max_epochs)
+    expected_called_events = list(engine.called_events)
 
+    # Add an interruption handler
+    engine.called_events = []
     @engine.on(interrupt_event)
     def call_interrupt():
         engine.interrupt()
@@ -1300,29 +1305,30 @@ def test_engine_run_interrupt_resume(interrupt_event, e, i):
     state = engine.run(data, max_epochs=max_epochs)
 
     if i is None:
-        if interrupt_event == Events.EPOCH_STARTED:
-            i = len(data) * (e - 1)
-        else:
-            i = len(data) * e
+        i = (len(data) * (e - 1)) if interrupt_event == Events.EPOCH_STARTED else len(data) * e
 
     if e is None:
         e = i // len(data) + 1
 
     # Check the last events
-    assert engine.called_events[-1] == (e, i, Events.INTERRUPT)
     assert engine.called_events[-2] == (e, i, interrupt_event)
+    assert engine.called_events[-1] == (e, i, Events.INTERRUPT)
     assert state.epoch == e
     assert state.iteration == i
     assert engine._dataloader_iter is not None
 
+    le = len(engine.called_events)
+    # We need to skip the last INTERRUPT event to compare with expected_called_events
+    assert expected_called_events[:le - 1] == engine.called_events[:-1]
+
+    # Resume the run
     engine.called_events = []
-
-    @engine.on(Events.STARTED)
-    def raise_error():
-        raise RuntimeError("Shouldn't be here")
-
     engine.run(data, max_epochs=max_epochs)
 
-    assert engine.called_events[0] != Events.STARTED
-    # Check the first and the last events
-    # ...
+    assert engine.called_events[0] == (e, i, Events.STARTED)
+    assert engine.called_events[1] == (e + 1, i, Events.EPOCH_STARTED)
+    assert engine.called_events[2] == (e + 1, i, Events.GET_BATCH_STARTED)
+    assert engine.called_events[3] == (e + 1, i, Events.GET_BATCH_COMPLETED)
+    assert engine.called_events[4] == (e + 1, i + 1, Events.ITERATION_STARTED)
+
+    # assert expected_called_events[le:] == engine.called_events

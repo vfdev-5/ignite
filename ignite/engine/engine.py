@@ -843,7 +843,7 @@ class Engine(Serializable):
             raise _EngineTerminateSingleEpochException()
 
         if self.should_interrupt:
-            raise _EngineinterruptException()
+            raise _EngineInterruptException()
 
     def _run_once_on_dataset(self) -> float:
         start_time = time.time()
