@@ -935,11 +935,6 @@ class Engine(Serializable):
             # as a general exception by the code below
             raise e
 
-        except _EngineTerminateSingleEpochException:
-            self._fire_event(Events.TERMINATE_SINGLE_EPOCH, iter_counter=iter_counter)
-            self.should_terminate_single_epoch = False
-            self._setup_dataloader_iter()
-
         except Exception as e:
             self.logger.error(f"Current run is terminating due to exception: {e}")
             self._handle_exception(e)
