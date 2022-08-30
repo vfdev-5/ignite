@@ -1302,7 +1302,12 @@ def test_engine_run_interrupt_resume(interrupt_event, e, i):
     assert engine.called_events[0] == (e, i, Events.STARTED)
     assert engine.called_events[1] == (e + 1, i, Events.EPOCH_STARTED)
     assert engine.called_events[2] == (e + 1, i, Events.GET_BATCH_STARTED)
-    assert engine.called_events[3] == (e + 1, i, Events.GET_BATCH_COMPLETED)
-    assert engine.called_events[4] == (e + 1, i + 1, Events.ITERATION_STARTED)
+    if i == len(data):
+        assert engine.called_events[3] == (e + 1, i, Events.DATALOADER_STOP_ITERATION)
+        assert engine.called_events[4] == (e + 1, i, Events.GET_BATCH_COMPLETED)
+        assert engine.called_events[5] == (e + 1, i + 1, Events.ITERATION_STARTED)
+    else:
+        assert engine.called_events[4] == (e + 1, i, Events.GET_BATCH_COMPLETED)
+        assert engine.called_events[5] == (e + 1, i + 1, Events.ITERATION_STARTED)
 
     # assert expected_called_events[le:] == engine.called_events

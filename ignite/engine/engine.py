@@ -133,7 +133,9 @@ class Engine(Serializable):
         self._allowed_events = []  # type: List[EventEnum]
 
         self._dataloader_iter = None  # type: Optional[Iterator[Any]]
-        self._init_iter = []  # type: List[int]
+        self._init_iter = None  # type: Optional[int]
+        self._iter_counter = None  # type: Optional[int]
+        self._resume_from_event = None  # type: Optional[Events]
 
         self.register_events(*Events)
 
@@ -732,7 +734,7 @@ class Engine(Serializable):
             if self.should_terminate:
                 # If engine was terminated and now is resuming from terminated state
                 # we need to initialize iter_counter as 0
-                self._init_iter.append(0)
+                self._init_iter = 0
 
         if self._dataloader_iter is None:
             self.state.dataloader = data
@@ -766,12 +768,58 @@ class Engine(Serializable):
     def _setup_engine(self) -> None:
         self._setup_dataloader_iter()
 
-        if len(self._init_iter) == 0:
+        if self._init_iter is None:
             iteration = self.state.iteration
             # Below we define initial counter value for _run_once_on_dataset to measure a single epoch
             if self.state.epoch_length is not None:
                 iteration %= self.state.epoch_length
-            self._init_iter.append(iteration)
+            self._init_iter = iteration
+
+    def _next_event(self, event: Events) -> Events:
+        _events_order = (
+            Events.STARTED,
+            Events.EPOCH_STARTED,
+            Events.GET_BATCH_STARTED,
+            Events.DATALOADER_STOP_ITERATION,
+            Events.GET_BATCH_COMPLETED,
+            Events.ITERATION_STARTED,
+            Events.ITERATION_COMPLETED,
+            Events.EPOCH_COMPLETED,
+            Events.COMPLETED,
+        )
+
+        try:
+            index = _events_order.index(event)
+        except IndexError:
+            raise IndexError(f"Provided event '{event}' can't have next event")
+
+        index = (index + 1) % len(_events_order)
+        next_event = _events_order[index]
+        if event == Events.ITERATION_COMPLETED:
+            if self.state.epoch_length is not None and self._iter_counter == self.state.epoch_length:
+                next_event = Events.EPOCH_COMPLETED
+            else:
+                next_event = Events.ITERATION_STARTED
+        elif event == Events.EPOCH_COMPLETED:
+            if self.state.epoch == self.state.max_epochs:
+                next_event = Events.COMPLETED
+            else:
+                next_event = Events.EPOCH_STARTED
+        return next_event
+
+    def _trigger_event(self, event_name: Any, *event_args: Any, **event_kwargs: Any) -> None:
+        if self._resume_from_event is not None and self._resume_from_event != event_name:
+            # skip the event
+            return
+
+        # Manually update counter here. This code should go away once we refactored the Engine
+        if event_name == Events.EPOCH_STARTED:
+            self.state.epoch += 1
+        elif event_name == Events.ITERATION_STARTED:
+            self.state.iteration += 1
+
+        self._fire_event(event_name, *event_args, **event_kwargs)
+        self._maybe_terminate_or_interrupt()
 
     def _internal_run(self) -> State:
         self.should_terminate = self.should_terminate_single_epoch = self.should_interrupt = False
@@ -779,15 +827,12 @@ class Engine(Serializable):
         try:
             try:
                 start_time = time.time()
-                self._fire_event(Events.STARTED)
-                self._maybe_terminate_or_interrupt()
+                self._trigger_event(Events.STARTED)
 
                 while not self._is_done(self.state) and not self.should_terminate:
-                    self.state.epoch += 1
                     handlers_start_time = time.time()
-                    self._fire_event(Events.EPOCH_STARTED)
+                    self._trigger_event(Events.EPOCH_STARTED)
                     epoch_time_taken = time.time() - handlers_start_time
-                    self._maybe_terminate_or_interrupt()
 
                     if self._dataloader_iter is None:
                         self._setup_engine()
@@ -798,11 +843,10 @@ class Engine(Serializable):
                     self.state.times[Events.EPOCH_COMPLETED.name] = epoch_time_taken
 
                     handlers_start_time = time.time()
-                    self._fire_event(Events.EPOCH_COMPLETED)
+                    self._trigger_event(Events.STARTED)
                     epoch_time_taken += time.time() - handlers_start_time
                     # update time wrt handlers
                     self.state.times[Events.EPOCH_COMPLETED.name] = epoch_time_taken
-                    self._maybe_terminate_or_interrupt()
 
                     hours, mins, secs = _to_hours_mins_secs(epoch_time_taken)
                     self.logger.info(
@@ -810,9 +854,11 @@ class Engine(Serializable):
                     )
 
             except _EngineTerminateException:
+                self._resume_from_event = Events.EPOCH_STARTED
                 self._fire_event(Events.TERMINATE)
 
             except _EngineInterruptException:
+                self._resume_from_event = self._next_event(self.last_event_name)
                 self._fire_event(Events.INTERRUPT)
                 return self.state
 
@@ -849,12 +895,7 @@ class Engine(Serializable):
         start_time = time.time()
 
         # We need to setup iter_counter > 0 if we resume from an iteration
-        if len(self._init_iter) > 1:
-            raise RuntimeError(
-                "Internal error, len(self._init_iter) should 0 or 1, "
-                f"but got: {len(self._init_iter)}, {self._init_iter}"
-            )
-        iter_counter = self._init_iter.pop() if len(self._init_iter) > 0 else 0
+        self._iter_counter = 0 if self._init_iter is None else self._init_iter
         should_exit = False
         try:
             if self._dataloader_iter is None:
@@ -868,20 +909,18 @@ class Engine(Serializable):
                 try:
                     # Avoid Events.GET_BATCH_STARTED triggered twice when data iter is restarted
                     if self.last_event_name != Events.DATALOADER_STOP_ITERATION:
-                        self._fire_event(Events.GET_BATCH_STARTED)
-                        self._maybe_terminate_or_interrupt()
+                        self._trigger_event(Events.GET_BATCH_STARTED)
 
                     self.state.batch = next(self._dataloader_iter)
-                    self._fire_event(Events.GET_BATCH_COMPLETED)
-                    self._maybe_terminate_or_interrupt()
+                    self._trigger_event(Events.GET_BATCH_COMPLETED)
 
-                    iter_counter += 1
+                    self._iter_counter += 1
                     should_exit = False
                 except StopIteration:
                     # Define self.state.epoch_length if it is not yet set
                     if self.state.epoch_length is None:
                         # Define epoch length and stop the epoch
-                        self.state.epoch_length = iter_counter
+                        self.state.epoch_length = self._iter_counter
                         if self.state.max_iters is not None:
                             self.state.max_epochs = math.ceil(self.state.max_iters / self.state.epoch_length)
                         break
@@ -902,23 +941,18 @@ class Engine(Serializable):
                             )
                         break
 
-                    self._fire_event(Events.DATALOADER_STOP_ITERATION)
-                    self._maybe_terminate_or_interrupt()
+                    self._trigger_event(Events.DATALOADER_STOP_ITERATION)
 
                     self._setup_dataloader_iter()
                     should_exit = True
 
                     continue
 
-                self.state.iteration += 1
-                self._fire_event(Events.ITERATION_STARTED)
-                self._maybe_terminate_or_interrupt()
-
+                self._trigger_event(Events.ITERATION_STARTED)
                 self.state.output = self._process_function(self, self.state.batch)
-                self._fire_event(Events.ITERATION_COMPLETED)
-                self._maybe_terminate_or_interrupt()
+                self._trigger_event(Events.ITERATION_COMPLETED)
 
-                if self.state.epoch_length is not None and iter_counter == self.state.epoch_length:
+                if self.state.epoch_length is not None and self._iter_counter == self.state.epoch_length:
                     break
 
                 if self.state.max_iters is not None and self.state.iteration == self.state.max_iters:
@@ -926,7 +960,7 @@ class Engine(Serializable):
                     raise _EngineTerminateException()
 
         except _EngineTerminateSingleEpochException:
-            self._fire_event(Events.TERMINATE_SINGLE_EPOCH, iter_counter=iter_counter)
+            self._fire_event(Events.TERMINATE_SINGLE_EPOCH, iter_counter=self._iter_counter)
             self.should_terminate_single_epoch = False
             self._setup_dataloader_iter()
 
