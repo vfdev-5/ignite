@@ -3,6 +3,7 @@ from pathlib import Path
 
 import fire
 import torch
+import torchvision
 import torch.nn as nn
 import torch.optim as optim
 import utils
@@ -35,7 +36,8 @@ def training(local_rank, config):
         else:
             now = f"stop-on-{config['stop_iteration']}"
 
-        folder_name = f"{config['model']}_backend-{idist.backend()}-{idist.get_world_size()}_{now}"
+        tv_api_version = "tvapi_v2" if config["use_vision_api_v2"] else "tvapi_stable"
+        folder_name = f"{config['model']}_backend-{idist.backend()}-{idist.get_world_size()}_{now}_{tv_api_version}"
         output_path = Path(output_path) / folder_name
         if not output_path.exists():
             output_path.mkdir(parents=True)
@@ -156,6 +158,7 @@ def run(
     stop_iteration=None,
     with_clearml=False,
     with_amp=False,
+    use_vision_api_v2=False,
     **spawn_kwargs,
 ):
     """Main entry to train an model on CIFAR10 dataset.
@@ -184,6 +187,7 @@ def run(
         stop_iteration (int, optional): iteration to stop the training. Can be used to check resume from checkpoint.
         with_clearml (bool): if True, experiment ClearML logger is setup. Default, False.
         with_amp (bool): if True, enables native automatic mixed precision. Default, False.
+        use_vision_api_v2 (bool): if True, data augmentations will be using torchvision prototype API. Default, False.
         **spawn_kwargs: Other kwargs to spawn run in child processes: master_addr, master_port, node_rank, nnodes
 
     """
@@ -215,7 +219,9 @@ def get_dataflow(config):
         # Thus each node will download a copy of the dataset
         idist.barrier()
 
-    train_dataset, test_dataset = utils.get_train_test_datasets(config["data_path"])
+    train_dataset, test_dataset = utils.get_train_test_datasets(
+        config["data_path"], use_vision_api_v2=config["use_vision_api_v2"]
+    )
 
     if idist.get_local_rank() == 0:
         # Ensure that only local rank 0 download the dataset
@@ -266,6 +272,7 @@ def log_metrics(logger, epoch, elapsed, tag, metrics):
 def log_basic_info(logger, config):
     logger.info(f"Train {config['model']} on CIFAR10")
     logger.info(f"- PyTorch version: {torch.__version__}")
+    logger.info(f"- Torchvision version: {torchvision.__version__}")
     logger.info(f"- Ignite version: {ignite.__version__}")
     if torch.cuda.is_available():
         # explicitly import cudnn as
