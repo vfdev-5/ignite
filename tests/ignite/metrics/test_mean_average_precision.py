@@ -651,9 +651,7 @@ def pycoco_mAP(predictions, targets) -> Tuple[float, float, float]:
     """
     Returned values belong to IOU thresholds of [0.5, 0.55, ..., 0.95], [0.5] and [0.75] respectively.
     """
-    coco_dt, coco_gt = create_coco_api(
-        [pred.clone() for pred in predictions], [target.clone() for target in targets]
-    )
+    coco_dt, coco_gt = create_coco_api([pred.clone() for pred in predictions], [target.clone() for target in targets])
     eval = COCOeval(coco_gt, coco_dt, iouType="bbox")
     eval.evaluate()
     eval.accumulate()
