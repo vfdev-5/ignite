@@ -547,9 +547,9 @@ def coco_val2017_sample() -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
 
 def random_sample() -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     torch.manual_seed(12)
-    golds = []
+    targets = []
     preds = []
-    for _ in range(120):
+    for _ in range(30):
         # Generate some ground truth boxes
         n_gt_box = torch.randint(50, (1,)).item()
         x1 = torch.randint(641, (n_gt_box, 1))
@@ -559,7 +559,7 @@ def random_sample() -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
         x2 = (x1 + w).clip(max=640)
         y2 = (y1 + h).clip(max=640)
         category = torch.randint(100, (n_gt_box, 1))
-        golds.append(torch.cat((x1, y1, x2, y2, category), dim=1))
+        targets.append(torch.cat((x1, y1, x2, y2, category), dim=1))
 
         # Remove some of gt boxes from corresponding predictions
         kept_boxes = torch.randint(2, (n_gt_box,), dtype=torch.bool)
@@ -601,7 +601,7 @@ def random_sample() -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
 
         preds.append(torch.cat((perturbed_gt_boxes, additional_pred_boxes), dim=0))
 
-    return preds, golds
+    return preds, targets
 
 
 def create_coco_api(predictions, targets):
@@ -652,13 +652,16 @@ def pycoco_mAP(predictions, targets) -> Tuple[float, float, float]:
     Returned values belong to IOU thresholds of [0.5, 0.55, ..., 0.95], [0.5] and [0.75] respectively.
     """
     coco_dt, coco_gt = create_coco_api(
-        [torch.clone(pred) for pred in predictions], [torch.clone(target) for target in targets]
+        [pred.clone() for pred in predictions], [target.clone() for target in targets]
     )
     eval = COCOeval(coco_gt, coco_dt, iouType="bbox")
     eval.evaluate()
     eval.accumulate()
     eval.summarize()
     return eval.stats[0], eval.stats[1], eval.stats[2]
+
+
+Sample = namedtuple("Sample", ["data", "mAP", "length"])
 
 
 @pytest.fixture(
@@ -674,8 +677,7 @@ def pycoco_mAP(predictions, targets) -> Tuple[float, float, float]:
     ],
     scope="session",
 )
-def sample(request) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
-    Sample = namedtuple("Sample", ["data", "mAP", "length"])
+def sample(request) -> Sample:
 
     data = coco_val2017_sample() if request.param[0] == "coco2017" else random_sample()
     if request.param[1] == "with_an_empty_pred":
@@ -813,7 +815,37 @@ def test_matching():
     # TODO: test latter part of the rule 3 ? no-op
 
 
-def test_distrib_integration(distributed, sample):
+def test_integration(sample):
+    from ignite.engine import Engine
+
+    n_iters = 3
+
+    def update(engine, i):
+        return sample.data
+
+    engine = Engine(update)
+
+    device = idist.device()
+    metric_device = "cpu" if device.type == "xla" else device
+    metric_50_95 = MeanAveragePrecision(device=metric_device)
+    metric_50_95.attach(engine, name="mAP[50-95]")
+
+    data = list(range(n_iters))
+    engine.run(data=data)
+
+    res_50_95 = engine.state.metrics["mAP[50-95]"]
+
+    predictions = []
+    targets = []
+    for _ in range(n_iters):
+        predictions += sample.data[0]
+        targets += sample.data[1]
+    pycoco_res_50_95, _, _ = pycoco_mAP(predictions, targets)
+
+    assert res_50_95 == pytest.approx(pycoco_res_50_95, abs=1e-4)
+
+
+def test_distrib_update_compute(distributed, sample):
     rank_samples_cnt = ceil(sample.length / idist.get_world_size())
     rank = idist.get_rank()
     rank_samples_range = slice(rank_samples_cnt * rank, rank_samples_cnt * (rank + 1))

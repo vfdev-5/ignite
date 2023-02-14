@@ -12,10 +12,21 @@ class MeanAveragePrecision(Metric):
     def __init__(
         self,
         iou_thresholds: Optional[Union[List[float], torch.Tensor]] = None,
+        rec_thresholds: Optional[Union[List[float], torch.Tensor]] = None,
         output_transform: Callable = lambda x: x,
         device: Union[str, torch.device] = torch.device("cpu"),
     ) -> None:
         r"""Calculate the mean average precision of overall categories.
+
+        If this metric is used with :class:`~ignite.engine.engine.Engine`, then output of evaluator should be
+        a tuple of 2 lists of tensors, e.g ``([pred1, pred2, pred3, ...], [gt1, gt2, gt3, ...])``.
+        First list is a batch of predictions and the second list is a batch of targets.
+        Lists should have the same length.
+
+        The shape of the ground truth is (N, 5) where N stands for the number of ground truth boxes and 5 is
+        (x1, y1, x2, y2, class_number).
+        The shape of the prediction is (M, 6) where M stands for the number of predicted boxes and 6 is
+        (x1, y1, x2, y2, confidence, class_number).
 
         Args:
             iou_thresholds: list of IoU thresholds to be considered for computing Mean Average Precision.
@@ -38,24 +49,35 @@ class MeanAveragePrecision(Metric):
             raise ModuleNotFoundError("This module requires torchvision to be installed.")
 
         if iou_thresholds is None:
-            self.iou_thresholds = torch.linspace(0.5, 0.95, 10).tolist()
-        elif isinstance(iou_thresholds, torch.Tensor):
-            if iou_thresholds.ndim != 1:
-                raise ValueError(
-                    "`iou_thresholds` should be a one-dimensional tensor or a list of floats"
-                    f", given a {iou_thresholds.ndim}-dimensional tensor."
-                )
-            self.iou_thresholds = iou_thresholds.sort().values.tolist()
-        elif isinstance(iou_thresholds, list):
-            self.iou_thresholds = iou_thresholds
-        else:
-            raise TypeError(f"`iou_thresholds` should be a list of floats or a tensor, given {type(iou_thresholds)}.")
+            iou_thresholds = torch.linspace(0.5, 0.95, 10).tolist()
 
-        if min(self.iou_thresholds) < 0 or max(self.iou_thresholds) > 1:
-            raise ValueError(f"`iou_thresholds` values should be between 0 and 1, given {iou_thresholds}")
+        self.iou_thresholds = self._setup_thresholds(iou_thresholds, "iou_thresholds")
 
-        self.rec_thresholds = torch.linspace(0, 1, 101, device=device, dtype=torch.double)
+        if rec_thresholds is None:
+            rec_thresholds = torch.linspace(0, 1, 101, device=device, dtype=torch.double)
+
+        self.rec_thresholds = self._setup_thresholds(rec_thresholds, "rec_thresholds")
+
         super(MeanAveragePrecision, self).__init__(output_transform=output_transform, device=device)
+
+    def _check_thresholds(self, thresholds: Union[List[float], torch.Tensor], tag: str) -> torch.Tensor:
+        if isinstance(thresholds, list):
+            thresholds = torch.tensor(thresholds)
+
+        if isinstance(thresholds, torch.Tensor):
+            if thresholds.ndim != 1:
+                raise ValueError(
+                    f"{tag} should be a one-dimensional tensor or a list of floats"
+                    f", given a {thresholds.ndim}-dimensional tensor."
+                )
+            thresholds = thresholds.sort().values.tolist()
+        else:
+            raise TypeError(f"{tag} should be a list of floats or a tensor, given {type(thresholds)}.")
+
+        if min(thresholds) < 0 or max(thresholds) > 1:
+            raise ValueError(f"{tag} values should be between 0 and 1, given {thresholds}")
+
+        return thresholds
 
     @reinit__is_reduced
     def reset(self) -> None:
@@ -66,7 +88,8 @@ class MeanAveragePrecision(Metric):
 
     @reinit__is_reduced
     def update(self, output: Tuple[torch.Tensor, torch.Tensor]) -> None:
-        """
+        """Metric update function using predictions and targets corresponding to a single image.
+
         Args:
             output: a tuple of 2 tensors in which the first one is the prediction and the second is the ground truth.
                 The shape of the ground truth is (N, 5) where N stands for the number of ground truth boxes and 5 is
@@ -75,13 +98,16 @@ class MeanAveragePrecision(Metric):
         """
         y_pred, y = output[0].detach(), output[1].detach()
 
+        if y_pred.ndim == 3 and y_pred.shape[0] == 1:
+            y_pred = y_pred.squeeze(0)
+        if y.ndim == 3 and y.shape[0] == 1:
+            y = y.squeeze(0)
+
         if y.ndim != 2 or y.shape[1] != 5:
             raise ValueError(f"Provided y with a wrong shape, expected (N, 5), got {y.shape}")
         if y_pred.ndim != 2 or y_pred.shape[1] != 6:
             raise ValueError(f"Provided y_pred with a wrong shape, expected (M, 6), got {y_pred.shape}")
-        # Does coco have class number 0? What is it?
-        # Find the number of categories dynamically or by user input?
-        categories = torch.cat((y[:, 4], y_pred[:, 5])).unique().int().tolist()
+        categories = torch.cat((y[:, 4], y_pred[:, 5])).int().unique().tolist()
         self._num_categories = max(self._num_categories, max(categories, default=-1) + 1)
         iou = self.box_iou(y_pred[:, :4], y[:, :4])
 
