@@ -96,7 +96,7 @@ def model_output_transform(output):
 
 save_every_iters = len(train_loader)
 
-num_epochs = 10
+num_epochs = 3
 
 criterion = nn.CrossEntropyLoss()
 

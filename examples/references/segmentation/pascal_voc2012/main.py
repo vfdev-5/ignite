@@ -172,7 +172,7 @@ def compute_and_log_cm(cm_metric, iteration):
                 ylabels=data.VOCSegmentationOpencv.target_names,
                 extra_layout=None,
             )
-        except NameError:
+        except Exception:
             # Temporary clearml bug work-around:
             # https://github.com/allegroai/clearml/pull/936
             pass
@@ -188,6 +188,10 @@ def create_trainer(model, optimizer, criterion, train_sampler, config, logger, w
 
     with_amp = config.get("with_amp", True)
     scaler = GradScaler(enabled=with_amp)
+
+    if torch.__version__[0] == 2:
+        print("-- Detected PT2.0 -> torch compile the model :) ")
+        model = torch.compile(model, backend="inductor")
 
     def forward_pass(batch):
         model.train()
