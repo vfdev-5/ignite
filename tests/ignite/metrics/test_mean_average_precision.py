@@ -724,13 +724,13 @@ def test_compute(sample):
 
 
 def test_wrong_input():
-    with pytest.raises(ValueError, match="`iou_thresholds` should be a one-dimensional tensor or a list of floats"):
+    with pytest.raises(ValueError, match="iou_thresholds should be a one-dimensional tensor or a list of floats"):
         MeanAveragePrecision(iou_thresholds=torch.zeros((2, 2)))
 
-    with pytest.raises(TypeError, match="`iou_thresholds` should be a list of floats or a tensor"):
+    with pytest.raises(TypeError, match="iou_thresholds should be a list of floats or a tensor"):
         MeanAveragePrecision(iou_thresholds={0: 0.5, 1: 0.75})
 
-    with pytest.raises(ValueError, match="`iou_thresholds` values should be between 0 and 1"):
+    with pytest.raises(ValueError, match="iou_thresholds values should be between 0 and 1"):
         MeanAveragePrecision(iou_thresholds=[0.5, 1.0, 1.5])
 
 
