@@ -70,11 +70,11 @@ class MeanAveragePrecision(Metric):
                     f"{tag} should be a one-dimensional tensor or a list of floats"
                     f", given a {thresholds.ndim}-dimensional tensor."
                 )
-            thresholds = thresholds.sort().values.tolist()
+            thresholds = thresholds.sort().values
         else:
             raise TypeError(f"{tag} should be a list of floats or a tensor, given {type(thresholds)}.")
 
-        if min(thresholds) < 0 or max(thresholds) > 1:
+        if thresholds.min() < 0 or thresholds.max() > 1:
             raise ValueError(f"{tag} values should be between 0 and 1, given {thresholds}")
 
         return thresholds
