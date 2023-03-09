@@ -60,7 +60,7 @@ class MeanAveragePrecision(Metric):
 
         super(MeanAveragePrecision, self).__init__(output_transform=output_transform, device=device)
 
-    def _check_thresholds(self, thresholds: Union[List[float], torch.Tensor], tag: str) -> torch.Tensor:
+    def _setup_thresholds(self, thresholds: Union[List[float], torch.Tensor], tag: str) -> torch.Tensor:
         if isinstance(thresholds, list):
             thresholds = torch.tensor(thresholds)
 
