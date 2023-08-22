@@ -10,7 +10,6 @@ MB = 1024.0 * 1024.0
 
 
 class FBResearchLogger:
-
     def __init__(self, logger, delimiter="  "):
         self.delimiter = delimiter
         self.logger = logger
@@ -51,15 +50,19 @@ class FBResearchLogger:
 
         meters = [f"{k}: {v:.4f}" for k, v in engine.state.metrics.items()]
 
-        msg = self.delimiter.join([
-            f"Epoch [{engine.state.epoch}/{engine.state.max_epochs}]",
-            f"[{current_iter}/{engine.state.epoch_length}]:",
-            f"ETA: {datetime.timedelta(seconds=int(eta_seconds))}",
-        ] + meters + [
-            f"Iter time: {iter_avg_time:.4f} s",
-            f"Data prep time: {self.data_timer.value():.4f} s",
-            cuda_max_mem,
-        ])
+        msg = self.delimiter.join(
+            [
+                f"Epoch [{engine.state.epoch}/{engine.state.max_epochs}]",
+                f"[{current_iter}/{engine.state.epoch_length}]:",
+                f"ETA: {datetime.timedelta(seconds=int(eta_seconds))}",
+            ]
+            + meters
+            + [
+                f"Iter time: {iter_avg_time:.4f} s",
+                f"Data prep time: {self.data_timer.value():.4f} s",
+                cuda_max_mem,
+            ]
+        )
         self.logger.info(msg)
 
     def log_epoch_started(self, engine, name):
@@ -68,9 +71,11 @@ class FBResearchLogger:
 
     def log_epoch_completed(self, engine):
         epoch_time = engine.state.times[Events.EPOCH_COMPLETED.name]
-        msg = self.delimiter.join([
-            f"Epoch [{engine.state.epoch}/{engine.state.max_epochs}]",
-            f"Total time: {datetime.timedelta(seconds=int(epoch_time))}",
-            f"({epoch_time / engine.state.epoch_length:.4f} s / it)"
-        ])
+        msg = self.delimiter.join(
+            [
+                f"Epoch [{engine.state.epoch}/{engine.state.max_epochs}]",
+                f"Total time: {datetime.timedelta(seconds=int(epoch_time))}",
+                f"({epoch_time / engine.state.epoch_length:.4f} s / it)",
+            ]
+        )
         self.logger.info(msg)

@@ -5,19 +5,19 @@ from typing import Any, Optional
 import fire
 import torch
 import torchvision
+
+from dataflow import get_dataflow
+from mean_ap import CocoMetric, convert_to_coco_api
 from torch.cuda.amp import autocast, GradScaler
+from utils import FBResearchLogger
 
 import ignite
 import ignite.distributed as idist
 from ignite.contrib.engines import common
 from ignite.engine import Engine, Events
-from ignite.handlers import Checkpoint, DiskSaver, global_step_from_engine, create_lr_scheduler_with_warmup
+from ignite.handlers import Checkpoint, create_lr_scheduler_with_warmup, DiskSaver, global_step_from_engine
 from ignite.metrics import Average
 from ignite.utils import manual_seed, setup_logger
-
-from dataflow import get_dataflow
-from mean_ap import CocoMetric, convert_to_coco_api
-from utils import FBResearchLogger
 
 
 def training(local_rank, config):
@@ -97,6 +97,11 @@ def training(local_rank, config):
         evaluators = {"training": train_evaluator, "test": evaluator}
         tb_logger = common.setup_tb_logging(output_path, trainer, optimizer, evaluators=evaluators)
 
+        from vis import draw_predictions
+
+        evaluator.add_event_handler(Events.ITERATION_COMPLETED(every=len(test_loader) // 10), draw_predictions)
+
+
     # Store 2 best models by validation accuracy starting from num_epochs / 2:
     best_model_handler = Checkpoint(
         {"model": model},
@@ -121,11 +126,9 @@ def training(local_rank, config):
         tb_logger.close()
 
 
-
 def initialize(config):
-
     kwargs = {"trainable_backbone_layers": config["trainable_backbone_layers"]}
-    if config["data_augs"] in ["fixedsize", ]:
+    if config["data_augs"] in ["fixedsize"]:
         kwargs["_skip_resize"] = True
 
     model = torchvision.models.get_model(
@@ -172,7 +175,9 @@ def initialize(config):
 
 def log_metrics(logger, epoch, elapsed, tag, metrics):
     metrics_output = "\n".join([f"\t{k}: {v}" for k, v in metrics.items()])
-    logger.info(f"Epoch[{epoch}] Evaluation complete. Time taken: {datetime.timedelta(seconds=int(elapsed))}\n - {tag} metrics:\n {metrics_output}")
+    logger.info(
+        f"Epoch[{epoch}] Evaluation complete. Time taken: {datetime.timedelta(seconds=int(elapsed))}\n - {tag} metrics:\n {metrics_output}"
+    )
 
 
 def log_basic_info(logger, config):
@@ -243,10 +248,11 @@ def create_trainer(model, optimizer, lr_scheduler, train_loader, config, logger)
             scaler.step(optimizer)
             scaler.update()
 
-        return {
+        output = {
             "batch_loss": losses.item() * grad_accumulation_steps,
-            "batch_loss_dict": {k: v.item() for k, v in loss_dict.items()},
         }
+        output.update({k: v.item() for k, v in loss_dict.items()})
+        return output
 
     trainer = Engine(train_step)
 
@@ -259,9 +265,7 @@ def create_trainer(model, optimizer, lr_scheduler, train_loader, config, logger)
     if with_amp:
         to_save["amp_scaler"] = scaler
 
-    metric_names = [
-        "batch_loss",
-    ]
+    metric_names = ["batch_loss"]
 
     common.setup_common_training_handlers(
         trainer=trainer,
@@ -326,26 +330,21 @@ def main(
     seed: int = 543,
     data_path: str = "/data",  # path to VOCdevkit, e.g. /data/VOCdevkit -> /data
     output_path: str = "/tmp/output-voc-detection",
-
     model: str = "retinanet_resnet50_fpn",
     weights: Optional[str] = None,  # weights enum name to load
     weights_backbone: Optional[str] = None,  # backbone weights enum name to load
     sync_bn: bool = False,
-
     num_epochs: int = 26,
     optim: str = "sgd",
     learning_rate: float = 0.01,
     momentum: float = 0.9,
     weight_decay: float = 1e-4,
-
     batch_size: int = 4,  # total batch size, nb images per gpu is batch_size / nb_gpus
     grad_accumulation_steps: int = 1,  # nb of gradients accumulation steps
     num_workers: int = 12,
     epoch_length: Optional[int] = None,
-
     trainable_backbone_layers: Optional[int] = None,
     data_augs: str = "hflip",  # object detection data aug presents: hflip and fixedsize
-
     validate_every: int = 3,
     checkpoint_every: int = 1000,
     backend: Optional[str] = None,
@@ -355,7 +354,6 @@ def main(
     with_clearml: bool = False,
     with_amp: bool = True,
     **spawn_kwargs: Any,
-
 ):
     # catch all local parameters
     config = locals()
@@ -370,5 +368,12 @@ def main(
         parallel.run(training, config)
 
 
+def download_dataset(path):
+    from dataflow import Dataset
+
+    _ = Dataset(path, image_set="train", download=True, transforms=None)
+    _ = Dataset(path, image_set="val", download=True, transforms=None)
+
+
 if __name__ == "__main__":
-    fire.Fire(main)
+    fire.Fire({"train": main, "download": download_dataset})

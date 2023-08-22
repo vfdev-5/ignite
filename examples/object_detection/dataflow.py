@@ -1,19 +1,17 @@
 from typing import Any, Tuple
 
+import albumentations as A
 
-import  numpy as np
+import numpy as np
 import torch
+from albumentations.pytorch.transforms import ToTensorV2
 from torch.utils.data import Subset
 from torchvision.datasets import VOCDetection
-
-import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2
 
 import ignite.distributed as idist
 
 
 class Dataset(VOCDetection):
-
     classes = (
         "aeroplane",
         "bicycle",
@@ -36,8 +34,8 @@ class Dataset(VOCDetection):
         "sheep",
         "person",
     )
-    name_to_class = {v: k + 1 for k, v in enumerate(classes)}
-    class_to_name = {v: k for k, v in name_to_class.items()}
+    name_to_label = {v: k + 1 for k, v in enumerate(classes)}
+    label_to_name = {v: k for k, v in name_to_label.items()}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -74,7 +72,7 @@ class Dataset(VOCDetection):
 
         target = {}
         target["boxes"] = bboxes
-        target["labels"] = (labels)
+        target["labels"] = labels
         target["image_id"] = annotations["filename"]
         target["area"] = (bboxes[:, 3] - bboxes[:, 1]) * (bboxes[:, 2] - bboxes[:, 0])
         target["iscrowd"] = torch.tensor([False] * len(bboxes))
@@ -129,10 +127,13 @@ def get_test_transform(config):
     bbox_params = A.BboxParams(format="pascal_voc")
 
     if config["data_augs"] == "hflip":
-        return A.Compose([
-            A.ToFloat(256),
-            ToTensorV2(),
-        ], bbox_params=bbox_params)
+        return A.Compose(
+            [
+                A.ToFloat(256),
+                ToTensorV2(),
+            ],
+            bbox_params=bbox_params,
+        )
 
     elif config["data_augs"] == "fixedsize":
         test_transform = A.Compose(
@@ -149,7 +150,6 @@ def get_test_transform(config):
 
 
 def get_dataflow(config):
-
     train_transform = get_train_transform(config)
     train_dataset = Dataset(config["data_path"], image_set="train", download=False, transforms=train_transform)
 

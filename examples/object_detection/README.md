@@ -21,22 +21,31 @@ Alternatively, install the all requirements using `pip install -r requirements.t
 
 ## Usage:
 
-We will train RetinaNet with pretrained Resnet50 backbone and FPN (`retinanet_resnet50_fpn`)
+### Download the dataset
+
+```bash
+python main.py download --path=/path/to/dataset/folder
+# for example
+# python main.py download --path=/data
+```
 
 ### Single GPU training
 
+We will train RetinaNet with pretrained Resnet50 backbone and FPN (`retinanet_resnet50_fpn_v2`)
+
 ```bash
-python main.py --data_path=/path/to/folder_with_vocdevkit --output_path=/path/to/output_folder  --batch_size=2 --model=retinanet_resnet50_fpn --weights_backbone="ResNet50_Weights.IMAGENET1K_V1"
+python main.py train --data_path=/path/to/folder_with_vocdevkit --output_path=/path/to/output_folder  --batch_size=2 --model=retinanet_resnet50_fpn_v2 --weights_backbone="ResNet50_Weights.IMAGENET1K_V1"
 # for example, we have /data/VOCdevkit
 # python main.py --data_path=/data --output_path=/output --model=retinanet_resnet50_fpn --weights_backbone="ResNet50_Weights.IMAGENET1K_V1"
 ```
 
 ### Multiple GPUs training using `torchrun`
 
+We will again train RetinaNet with pretrained Resnet50 backbone and FPN (`retinanet_resnet50_fpn_v2`).
 Let's say we have 4 GPUs and we pick total batch size as 16 (4 per device):
 
 ```bash
-torchrun --nproc_per_node=4 main.py --backend=nccl --batch_size=16 --data_path=/path/to/folder_with_vocdevkit --output_path=/path/to/output_folder --model=retinanet_resnet50_fpn --weights_backbone="ResNet50_Weights.IMAGENET1K_V1"
+torchrun --nproc_per_node=4 main.py train --backend=nccl --batch_size=16 --data_path=/path/to/folder_with_vocdevkit --output_path=/path/to/output_folder --model=retinanet_resnet50_fpn_v2 --weights_backbone="ResNet50_Weights.IMAGENET1K_V1"
 ```
 
 ### Open TensorBoard
