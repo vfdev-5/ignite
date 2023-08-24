@@ -9,39 +9,33 @@ import torchvision
 from dataflow import get_dataflow
 from mean_ap import CocoMetric, convert_to_coco_api
 from torch.cuda.amp import autocast, GradScaler
-from utils import FBResearchLogger
+from utils import FBResearchLogger, save_config
 
 import ignite
 import ignite.distributed as idist
 from ignite.contrib.engines import common
 from ignite.engine import Engine, Events
 from ignite.handlers import Checkpoint, create_lr_scheduler_with_warmup, DiskSaver, global_step_from_engine
-from ignite.metrics import Average
 from ignite.utils import manual_seed, setup_logger
 
 
 def training(local_rank, config):
     rank = idist.get_rank()
     manual_seed(config["seed"] + rank)
-    device = idist.device()
-
-    logger = setup_logger(name="VOCDetection-Training")
-    log_basic_info(logger, config)
 
     output_path = config["output_path"]
+    now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    folder_name = f"{config['model']}_backend-{idist.backend()}-{idist.get_world_size()}_{now}"
+    output_path = Path(output_path) / folder_name
+    config["output_path"] = output_path.as_posix()
+    if rank == 0 and not output_path.exists():
+        output_path.mkdir(parents=True)
+
+    logger = setup_logger(name="VOCDetection-Training", filepath=output_path / "logs.txt")
+    log_basic_info(logger, config)
+    logger.info(f"Output path: {config['output_path']}")
+
     if rank == 0:
-        now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-
-        folder_name = f"{config['model']}_backend-{idist.backend()}-{idist.get_world_size()}_{now}"
-        output_path = Path(output_path) / folder_name
-        if not output_path.exists():
-            output_path.mkdir(parents=True)
-        config["output_path"] = output_path.as_posix()
-        logger.info(f"Output path: {config['output_path']}")
-
-        if "cuda" in device.type:
-            config["cuda device name"] = torch.cuda.get_device_name(local_rank)
-
         if config["with_clearml"]:
             from clearml import Task
 
@@ -57,6 +51,8 @@ def training(local_rank, config):
                 "learning_rate",
             ]
             task.connect({k: config[k] for k in hyper_params})
+        else:
+            save_config(config, output_path / "args.yaml")
 
     # Setup dataflow, model, optimizer, criterion
     train_loader, train_eval_loader, test_loader, num_classes = get_dataflow(config)
@@ -89,6 +85,9 @@ def training(local_rank, config):
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED(every=config["validate_every"]) | Events.COMPLETED, run_validation)
 
+    if config["start_by_validation"]:
+        trainer.add_event_handler(Events.STARTED, run_validation)
+
     if rank == 0:
         # Setup TensorBoard logging on trainer and evaluators. Logged values are:
         #  - Training metrics, e.g. running average loss values
@@ -99,8 +98,13 @@ def training(local_rank, config):
 
         from vis import draw_predictions
 
-        evaluator.add_event_handler(Events.ITERATION_COMPLETED(every=len(test_loader) // 10), draw_predictions)
+        train_evaluator.add_event_handler(
+            Events.ITERATION_COMPLETED(every=len(test_loader) // 3), draw_predictions, tb_logger, "Train Eval"
+        )
 
+        evaluator.add_event_handler(
+            Events.ITERATION_COMPLETED(every=len(test_loader) // 3), draw_predictions, tb_logger, "Validation"
+        )
 
     # Store 2 best models by validation accuracy starting from num_epochs / 2:
     best_model_handler = Checkpoint(
@@ -346,6 +350,7 @@ def main(
     trainable_backbone_layers: Optional[int] = None,
     data_augs: str = "hflip",  # object detection data aug presents: hflip and fixedsize
     validate_every: int = 3,
+    start_by_validation: bool = False,
     checkpoint_every: int = 1000,
     backend: Optional[str] = None,
     resume_from: Optional[str] = None,

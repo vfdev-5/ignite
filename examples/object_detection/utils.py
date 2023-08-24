@@ -41,7 +41,7 @@ class FBResearchLogger:
     def log_every(self, engine):
         cuda_max_mem = ""
         if torch.cuda.is_available():
-            cuda_max_mem = f"GPU Max Mem: {torch.cuda.max_memory_allocated() / MB:.0f} MB"
+            cuda_max_mem = f"GPU Max Mem: {torch.cuda.memory_allocated() / MB:.0f} MB"
 
         current_iter = engine.state.iteration % (engine.state.epoch_length + 1)
         iter_avg_time = self.iter_timer.value()
@@ -79,3 +79,9 @@ class FBResearchLogger:
             ]
         )
         self.logger.info(msg)
+
+
+def save_config(config, path):
+    with open(path, "w") as h:
+        for k, v in config.items():
+            h.write(f"{k}: {v}\n")

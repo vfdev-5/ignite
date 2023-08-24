@@ -68,7 +68,7 @@ class Dataset(VOCDetection):
         image, bboxes_classes = result["image"], result["bboxes"]
 
         bboxes = torch.tensor([a[:4] for a in bboxes_classes])
-        labels = torch.tensor([self.name_to_class[a[4]] for a in bboxes_classes])
+        labels = torch.tensor([self.name_to_label[a[4]] for a in bboxes_classes])
 
         target = {}
         target["boxes"] = bboxes
