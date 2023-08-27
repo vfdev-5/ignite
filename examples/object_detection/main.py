@@ -165,13 +165,14 @@ def initialize(config):
     optimizer = idist.auto_optim(optimizer)
 
     num_epochs = config["num_epochs"]
-    milestones = [int(num_epochs * 0.8), int(num_epochs * 0.9)]
+    le = config["epoch_length"]
+    milestones = [int(num_epochs * 0.8 * le), int(num_epochs * 0.9 * le)]
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
 
     lr_scheduler = create_lr_scheduler_with_warmup(
         lr_scheduler,
-        0.001,
-        min(1000, config["epoch_length"] - 1),
+        warmup_start_value=1e-5,
+        warmup_duration=min(1000, le - 1),
     )
 
     return model, optimizer, lr_scheduler
@@ -282,7 +283,9 @@ def create_trainer(model, optimizer, lr_scheduler, train_loader, config, logger)
         with_pbars=False,
     )
 
-    FBResearchLogger(logger).attach(trainer, "Train", every=config["log_every_iters"])
+    FBResearchLogger(logger, show_output=True).attach(
+        trainer, name="Train", every=config["log_every_iters"], optimizer=optimizer
+    )
 
     resume_from = config["resume_from"]
     if resume_from is not None:
@@ -339,8 +342,8 @@ def main(
     weights_backbone: Optional[str] = None,  # backbone weights enum name to load
     sync_bn: bool = False,
     num_epochs: int = 26,
-    optim: str = "sgd",
-    learning_rate: float = 0.01,
+    optim: str = "adamw",
+    learning_rate: float = 0.0001,
     momentum: float = 0.9,
     weight_decay: float = 1e-4,
     batch_size: int = 4,  # total batch size, nb images per gpu is batch_size / nb_gpus

@@ -4,21 +4,23 @@ import torch
 
 from ignite.engine import Engine, Events
 from ignite.handlers import Timer
+from ignite.metrics import Average, RunningAverage
 
 
 MB = 1024.0 * 1024.0
 
 
 class FBResearchLogger:
-    def __init__(self, logger, delimiter="  "):
+    def __init__(self, logger, delimiter="  ", show_output=False):
         self.delimiter = delimiter
         self.logger = logger
         self.iter_timer = None
         self.data_timer = None
+        self.show_output = show_output
 
-    def attach(self, engine: Engine, name: str, every: int = 1):
+    def attach(self, engine: Engine, name: str, every: int = 1, optimizer=None):
         engine.add_event_handler(Events.EPOCH_STARTED, self.log_epoch_started, engine, name)
-        engine.add_event_handler(Events.ITERATION_COMPLETED(every=every), self.log_every, engine)
+        engine.add_event_handler(Events.ITERATION_COMPLETED(every=every), self.log_every, engine, optimizer=optimizer)
         engine.add_event_handler(Events.EPOCH_COMPLETED, self.log_epoch_completed, engine)
 
         self.iter_timer = Timer(average=True)
@@ -38,25 +40,40 @@ class FBResearchLogger:
             step=Events.GET_BATCH_COMPLETED,
         )
 
-    def log_every(self, engine):
+    def log_every(self, engine, optimizer=None):
         cuda_max_mem = ""
         if torch.cuda.is_available():
-            cuda_max_mem = f"GPU Max Mem: {torch.cuda.memory_allocated() / MB:.0f} MB"
+            cuda_max_mem = f"GPU Max Mem: {torch.cuda.max_memory_allocated() / MB:.0f} MB"
 
         current_iter = engine.state.iteration % (engine.state.epoch_length + 1)
         iter_avg_time = self.iter_timer.value()
 
         eta_seconds = iter_avg_time * (engine.state.epoch_length - current_iter)
 
-        meters = [f"{k}: {v:.4f}" for k, v in engine.state.metrics.items()]
+        outputs = []
+        if self.show_output:
+            output = engine.state.output
+            if isinstance(output, dict):
+                outputs += [f"{k}: {v:.4f}" for k, v in output.items()]
+            else:
+                outputs += [f"{v:.4f}" if isinstance(v, float) else f"{v}" for v in output]
+
+        lrs = ""
+        if optimizer is not None:
+            if len(optimizer.param_groups) == 1:
+                lrs += f"lr: {optimizer.param_groups[0]['lr']:.4f}"
+            else:
+                for i, g in enumerate(optimizer.param_groups):
+                    lrs += f"lr [g{i}]: {g['lr']:.4f}"
 
         msg = self.delimiter.join(
             [
                 f"Epoch [{engine.state.epoch}/{engine.state.max_epochs}]",
                 f"[{current_iter}/{engine.state.epoch_length}]:",
                 f"ETA: {datetime.timedelta(seconds=int(eta_seconds))}",
+                f"{lrs}",
             ]
-            + meters
+            + outputs
             + [
                 f"Iter time: {iter_avg_time:.4f} s",
                 f"Data prep time: {self.data_timer.value():.4f} s",
