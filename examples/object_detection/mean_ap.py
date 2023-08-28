@@ -12,6 +12,7 @@ import torch
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
+import ignite.distributed as idist
 from ignite.metrics import Metric
 
 
@@ -77,6 +78,10 @@ class CocoEvaluator:
         img_ids, eval_imgs = evaluate(self.coco_eval)
         self.eval_imgs.append(eval_imgs)
 
+    def synchronize_between_processes(self):
+        self.eval_imgs = np.concatenate(self.eval_imgs, 2)
+        create_common_coco_eval(self.coco_eval, self.img_ids, self.eval_imgs)
+
     def accumulate(self):
         self.coco_eval.accumulate()
 
@@ -111,73 +116,36 @@ class CocoEvaluator:
             )
         return coco_results
 
-    def prepare_for_coco_segmentation(self, predictions):
-        coco_results = []
-        for original_id, prediction in predictions.items():
-            if len(prediction) == 0:
-                continue
-
-            scores = prediction["scores"]
-            labels = prediction["labels"]
-            masks = prediction["masks"]
-
-            masks = masks > 0.5
-
-            scores = prediction["scores"].tolist()
-            labels = prediction["labels"].tolist()
-
-            rles = [
-                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0] for mask in masks
-            ]
-            for rle in rles:
-                rle["counts"] = rle["counts"].decode("utf-8")
-
-            coco_results.extend(
-                [
-                    {
-                        "image_id": original_id,
-                        "category_id": labels[k],
-                        "segmentation": rle,
-                        "score": scores[k],
-                    }
-                    for k, rle in enumerate(rles)
-                ]
-            )
-        return coco_results
-
-    def prepare_for_coco_keypoint(self, predictions):
-        coco_results = []
-        for original_id, prediction in predictions.items():
-            if len(prediction) == 0:
-                continue
-
-            boxes = prediction["boxes"]
-            boxes = convert_to_xywh(boxes).tolist()
-            scores = prediction["scores"].tolist()
-            labels = prediction["labels"].tolist()
-            keypoints = prediction["keypoints"]
-            keypoints = keypoints.flatten(start_dim=1).tolist()
-
-            coco_results.extend(
-                [
-                    {
-                        "image_id": original_id,
-                        "category_id": labels[k],
-                        "keypoints": keypoint,
-                        "score": scores[k],
-                    }
-                    for k, keypoint in enumerate(keypoints)
-                ]
-            )
-        return coco_results
-
 
 def convert_to_xywh(boxes):
     xmin, ymin, xmax, ymax = boxes.unbind(1)
     return torch.stack((xmin, ymin, xmax - xmin, ymax - ymin), dim=1)
 
 
+def merge(img_ids, eval_imgs):
+    all_img_ids = idist.all_gather(img_ids)
+    all_eval_imgs = idist.all_gather(eval_imgs)
+
+    merged_img_ids = []
+    for p in all_img_ids:
+        merged_img_ids.extend(p)
+
+    merged_eval_imgs = []
+    for p in all_eval_imgs:
+        merged_eval_imgs.append(p)
+
+    merged_img_ids = np.array(merged_img_ids)
+    merged_eval_imgs = np.concatenate(merged_eval_imgs, 2)
+
+    # keep only unique (and in sorted order) images
+    merged_img_ids, idx = np.unique(merged_img_ids, return_index=True)
+    merged_eval_imgs = merged_eval_imgs[..., idx]
+
+    return merged_img_ids, merged_eval_imgs
+
+
 def create_common_coco_eval(coco_eval, img_ids, eval_imgs):
+    img_ids, eval_imgs = merge(img_ids, eval_imgs)
     img_ids = list(img_ids)
     eval_imgs = list(eval_imgs.flatten())
 
@@ -210,6 +178,11 @@ class CocoMetric(Metric):
         self.update(engine.state.output)
 
     def compute(self):
+
+        if idist.get_world_size() > 1:
+            # sync between processes
+            self.coco_evaluator.synchronize_between_processes()
+
         self.coco_evaluator.accumulate()
         self.coco_evaluator.summarize()
         return self.coco_evaluator.coco_eval.stats[0]
