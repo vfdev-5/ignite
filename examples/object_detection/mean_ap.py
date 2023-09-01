@@ -178,11 +178,111 @@ class CocoMetric(Metric):
         self.update(engine.state.output)
 
     def compute(self):
-
-        if idist.get_world_size() > 1:
-            # sync between processes
-            self.coco_evaluator.synchronize_between_processes()
+        # sync between processes
+        self.coco_evaluator.synchronize_between_processes()
 
         self.coco_evaluator.accumulate()
         self.coco_evaluator.summarize()
         return self.coco_evaluator.coco_eval.stats[0]
+
+
+def test_metric(lrank, data_path, max_batches=None, expected_mean_ap=None):
+    from dataflow import Dataset, default_od_collate_fn, get_test_transform
+    from torch.utils.data import Subset
+
+    config = {
+        "data_path": data_path,
+        "data_augs": "hflip",
+        "batch_size": 8,
+        "num_workers": 4,
+    }
+
+    val_transform = get_test_transform(config)
+    test_dataset = Dataset(config["data_path"], image_set="val", download=False, transforms=val_transform)
+    test_dataset = Subset(test_dataset, indices=range(max_batches * config["batch_size"]))
+    test_loader = idist.auto_dataloader(
+        test_dataset,
+        batch_size=config["batch_size"],
+        num_workers=config["num_workers"],
+        shuffle=False,
+        collate_fn=default_od_collate_fn,
+    )
+
+    metric = CocoMetric(convert_to_coco_api(test_dataset))
+
+    if max_batches is None:
+        max_batches = len(test_loader)
+
+    ws = idist.get_world_size()
+    r = idist.get_rank()
+
+    def cond(j):
+        return (ws * j + r) % 3 == 0
+
+    for i, batch in enumerate(test_loader):
+        if i >= max_batches:
+            break
+
+        # y_true is a list of dicts with keys: ['boxes', 'labels', 'image_id', 'area', 'iscrowd']
+        y_true = batch[1]
+        # y_pred is a list of dicts with keys: 'boxes', 'scores', 'labels'
+
+        # For each process we set up the predictions as the GT with a certain rule
+        # We need a global index = ws * data_index + rank
+        # Single proc:
+        # bs = 8
+        # proc 0:
+        #   y_true: [y0, y1, y2, y3, y4, y5, y6, y7]
+        #
+        #   y_pred: [y0, 0, 0, y3, 0, 0, y6, 0]
+
+        # Two procs:
+        # Data is distributed as [a, b, c, d] -> [a, c], [b, d]
+        # bs = 4 per proc
+        # proc 0:
+        #   y_true: [y0, y2, y4, y6]
+        #   y_pred: [y0, 0,  0, y6]
+        # proc 1:
+        #   y_true: [y1, y3, y5, y7]
+        #   y_pred: [0,  y3,  0,  0]
+
+        y_pred = [
+            {
+                "boxes": y["boxes"]
+                if cond(j)
+                else torch.tensor([], device=y["boxes"].device, dtype=y["boxes"].dtype).reshape(0, 4),
+                "scores": 0.78 * torch.ones_like(y["labels"], dtype=torch.float32)
+                if cond(j)
+                else torch.tensor([], device=y["labels"].device, dtype=torch.float32),
+                "labels": y["labels"]
+                if cond(j)
+                else torch.tensor([], device=y["labels"].device, dtype=y["labels"].dtype),
+            }
+            for j, y in enumerate(y_true)
+        ]
+        metric.update((y_pred, y_true))
+
+    value = metric.compute()
+    import time
+
+    time.sleep(0.1 * lrank)
+    print(lrank, "mAP:", value)
+    if expected_mean_ap is not None:
+        assert value == expected_mean_ap
+
+    return value
+
+
+if __name__ == "__main__":
+    # DDP Tests
+    import sys
+    from pathlib import Path
+
+    data_path = Path(sys.argv[1])
+    assert data_path.exists()
+
+    print("Expected (single process)")
+    expected_mean_ap = test_metric(0, data_path, 10)
+
+    print("Ouput (two processes)")
+    idist.spawn("gloo", test_metric, (data_path, 10, expected_mean_ap), nproc_per_node=2)

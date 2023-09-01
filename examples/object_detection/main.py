@@ -6,7 +6,7 @@ import fire
 import torch
 import torchvision
 
-from dataflow import get_dataflow
+from dataflow import Dataset, get_dataflow, get_dataloader
 from mean_ap import CocoMetric, convert_to_coco_api
 from torch.cuda.amp import autocast, GradScaler
 from utils import FBResearchLogger, save_config
@@ -26,7 +26,7 @@ def training(local_rank, config):
     output_path = config["output_path"]
     now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     folder_name = f"{config['model']}_backend-{idist.backend()}-{idist.get_world_size()}_{now}"
-    output_path = Path(output_path) / folder_name
+    output_path = Path(output_path) / "train" / folder_name
     config["output_path"] = output_path.as_posix()
     if rank == 0 and not output_path.exists():
         output_path.mkdir(parents=True)
@@ -55,7 +55,7 @@ def training(local_rank, config):
             save_config(config, output_path / "args.yaml")
 
     # Setup dataflow, model, optimizer, criterion
-    train_loader, train_eval_loader, test_loader, num_classes = get_dataflow(config)
+    train_loader, train_eval_loader, val_loader, num_classes = get_dataflow(config)
 
     config["num_classes"] = num_classes
     if config["epoch_length"] is None:
@@ -68,7 +68,7 @@ def training(local_rank, config):
     # We define two evaluators as they wont have exactly similar roles:
     # - `evaluator` will save the best model based on validation score
     evaluator = create_evaluator(
-        model, metrics={"mAP": CocoMetric(convert_to_coco_api(test_loader.dataset))}, config=config
+        model, metrics={"mAP": CocoMetric(convert_to_coco_api(val_loader.dataset))}, config=config
     )
     FBResearchLogger(logger).attach(evaluator, "Test", every=config["log_every_iters"])
     train_evaluator = create_evaluator(
@@ -80,7 +80,7 @@ def training(local_rank, config):
         epoch = trainer.state.epoch
         state = train_evaluator.run(train_eval_loader)
         log_metrics(logger, epoch, state.times["COMPLETED"], "Train", state.metrics)
-        state = evaluator.run(test_loader)
+        state = evaluator.run(val_loader)
         log_metrics(logger, epoch, state.times["COMPLETED"], "Test", state.metrics)
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED(every=config["validate_every"]) | Events.COMPLETED, run_validation)
@@ -99,11 +99,11 @@ def training(local_rank, config):
         from vis import draw_predictions
 
         train_evaluator.add_event_handler(
-            Events.ITERATION_COMPLETED(every=len(test_loader) // 3), draw_predictions, tb_logger, "Train Eval"
+            Events.ITERATION_COMPLETED(every=len(val_loader) // 3), draw_predictions, tb_logger, "Train Eval"
         )
 
         evaluator.add_event_handler(
-            Events.ITERATION_COMPLETED(every=len(test_loader) // 3), draw_predictions, tb_logger, "Validation"
+            Events.ITERATION_COMPLETED(every=len(val_loader) // 3), draw_predictions, tb_logger, "Validation"
         )
 
     # Store 2 best models by validation accuracy starting from num_epochs / 2:
@@ -137,13 +137,15 @@ def initialize(config):
 
     model = torchvision.models.get_model(
         config["model"],
-        weights=config["weights"],
         weights_backbone=config["weights_backbone"],
         num_classes=config["num_classes"] + 1,
         **kwargs,
     )
     # Adapt model for distributed settings if configured
     model = idist.auto_model(model, sync_bn=config["sync_bn"])
+
+    if config["with_torch_compile"]:
+        model = torch.compile(model)
 
     opt_name = config["optim"]
     if opt_name.startswith("sgd"):
@@ -333,20 +335,22 @@ def get_save_handler(config):
     return DiskSaver(config["output_path"], require_empty=False)
 
 
-def main(
+def main_train(
     seed: int = 543,
     data_path: str = "/data",  # path to VOCdevkit, e.g. /data/VOCdevkit -> /data
     output_path: str = "/tmp/output-voc-detection",
     model: str = "retinanet_resnet50_fpn",
-    weights: Optional[str] = None,  # weights enum name to load
-    weights_backbone: Optional[str] = None,  # backbone weights enum name to load
+    weights_backbone: Optional[str] = None,  # backbone weights enum name to load, e.g. ResNet50_Weights.IMAGENET1K_V1
     sync_bn: bool = False,
     num_epochs: int = 26,
     optim: str = "adamw",
     learning_rate: float = 0.0001,
     momentum: float = 0.9,
     weight_decay: float = 1e-4,
-    batch_size: int = 4,  # total batch size, nb images per gpu is batch_size / nb_gpus
+    batch_size: int = 4,  # total batch size for training, nb images per gpu is batch_size / nb_gpus
+    eval_batch_size: Optional[
+        int
+    ] = None,  # total batch size for evaluation, nb images per gpu is batch_size / nb_gpus. By default, eval_batch_size = 2 * batch_size
     grad_accumulation_steps: int = 1,  # nb of gradients accumulation steps
     num_workers: int = 12,
     epoch_length: Optional[int] = None,
@@ -361,6 +365,7 @@ def main(
     nproc_per_node: Optional[int] = None,
     with_clearml: bool = False,
     with_amp: bool = True,
+    with_torch_compile: bool = False,
     **spawn_kwargs: Any,
 ):
     # catch all local parameters
@@ -376,6 +381,87 @@ def main(
         parallel.run(training, config)
 
 
+def evaluation(local_rank, config):
+    rank = idist.get_rank()
+    manual_seed(config["seed"] + rank)
+
+    output_path = config["output_path"]
+    now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    folder_name = f"{config['model']}_backend-{idist.backend()}-{idist.get_world_size()}_{now}"
+    output_path = Path(output_path) / "eval" / folder_name
+    config["output_path"] = output_path.as_posix()
+    if rank == 0 and not output_path.exists():
+        output_path.mkdir(parents=True)
+
+    logger = setup_logger(name="VOCDetection-Evaluation", filepath=output_path / "logs.txt")
+    log_basic_info(logger, config)
+    logger.info(f"Output path: {config['output_path']}")
+
+    if rank == 0:
+        save_config(config, output_path / "args.yaml")
+
+    # Setup dataflow, model, optimizer, criterion
+    val_loader = get_dataloader("eval", config)
+
+    config["num_classes"] = len(Dataset.classes)
+    kwargs = {}
+    if config["data_augs"] in ["fixedsize"]:
+        kwargs["_skip_resize"] = True
+
+    model = torchvision.models.get_model(
+        config["model"],
+        num_classes=config["num_classes"] + 1,
+        **kwargs,
+    )
+    # Adapt model for distributed settings if configured
+    model = idist.auto_model(model, sync_bn=config["sync_bn"])
+
+    weights_path = Path(config["weights_path"])
+    assert weights_path.exists(), f"Weights path '{weights_path.as_posix()}' is not found"
+    logger.info(f"Load model weights from file: {weights_path.as_posix()}")
+    checkpoint = torch.load(weights_path.as_posix(), map_location="cpu")
+    Checkpoint.load_objects(to_load={"model": model}, checkpoint=checkpoint)
+
+    evaluator = create_evaluator(
+        model, metrics={"mAP": CocoMetric(convert_to_coco_api(val_loader.dataset))}, config=config
+    )
+    FBResearchLogger(logger).attach(evaluator, "Test", every=config["log_every_iters"])
+
+    try:
+        state = evaluator.run(val_loader)
+    except Exception as e:
+        logger.exception("")
+        raise e
+
+    log_metrics(logger, 0, state.times["COMPLETED"], "Test", state.metrics)
+
+
+def main_evaluate(
+    weights_path: str,
+    data_path: str = "/data",  # path to VOCdevkit, e.g. /data/VOCdevkit -> /data
+    output_path: str = "/tmp/output-voc-detection",
+    model: str = "retinanet_resnet50_fpn",
+    sync_bn: bool = False,
+    eval_batch_size: int = 4,  # total batch size, nb images per gpu is batch_size / nb_gpus
+    num_workers: int = 4,
+    backend: Optional[str] = None,
+    nproc_per_node: Optional[int] = None,
+    with_amp: bool = True,
+    **spawn_kwargs: Any,
+):
+    # catch all local parameters
+    config = locals()
+    config.update(config["spawn_kwargs"])
+    del config["spawn_kwargs"]
+
+    spawn_kwargs["nproc_per_node"] = nproc_per_node
+    if backend == "xla-tpu" and with_amp:
+        raise RuntimeError("The value of with_amp should be False if backend is xla")
+
+    with idist.Parallel(backend=backend, **spawn_kwargs) as parallel:
+        parallel.run(evaluation, config)
+
+
 def download_dataset(path):
     from dataflow import Dataset
 
@@ -384,4 +470,10 @@ def download_dataset(path):
 
 
 if __name__ == "__main__":
-    fire.Fire({"train": main, "download": download_dataset})
+    fire.Fire(
+        {
+            "train": main_train,
+            "eval": main_evaluate,
+            "download": download_dataset,
+        }
+    )

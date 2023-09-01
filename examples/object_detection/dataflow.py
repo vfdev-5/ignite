@@ -149,49 +149,51 @@ def get_test_transform(config):
     raise ValueError()
 
 
-def get_dataflow(config):
-    train_transform = get_train_transform(config)
-    train_dataset = Dataset(config["data_path"], image_set="train", download=False, transforms=train_transform)
+def get_dataloader(mode, config, train_eval_size=None):
+    assert mode in ["train", "train_eval", "eval"]
 
-    val_transform = get_test_transform(config)
-    test_dataset = Dataset(config["data_path"], image_set="val", download=False, transforms=val_transform)
-
-    if 10 * len(test_dataset) < len(train_dataset):
-        g = torch.Generator().manual_seed(len(train_dataset))
-        train_eval_indices = torch.randperm(len(train_dataset), generator=g)[: len(test_dataset)]
-        train_eval_dataset = Subset(train_dataset, train_eval_indices)
+    if mode in ["train", "train_eval"]:
+        transform = get_train_transform(config)
+        image_set = "train"
     else:
-        train_eval_dataset = train_dataset
+        transform = get_test_transform(config)
+        image_set = "val"
+
+    dataset = Dataset(config["data_path"], image_set=image_set, download=False, transforms=transform)
+
+    if mode == "train_eval" and train_eval_size is not None:
+        g = torch.Generator().manual_seed(len(dataset))
+        train_eval_indices = torch.randperm(len(dataset), generator=g)[:train_eval_size]
+        dataset = Subset(dataset, train_eval_indices)
 
     collate_fn = default_od_collate_fn
     # if config["data_augs"] == "fixedsize":
     #     collate_fn = fixedsize_collate_fn
 
-    train_loader = idist.auto_dataloader(
-        train_dataset,
-        batch_size=config["batch_size"],
+    if config["eval_batch_size"] is None:
+        config["eval_batch_size"] = 2 * config["batch_size"]
+
+    data_loader = idist.auto_dataloader(
+        dataset,
+        batch_size=config["batch_size"] if mode == "train" else config["eval_batch_size"],
         num_workers=config["num_workers"],
-        shuffle=True,
-        drop_last=True,
+        shuffle=True if mode == "train" else False,
+        drop_last=True if mode == "train" else False,
         collate_fn=collate_fn,
     )
 
-    train_eval_loader = idist.auto_dataloader(
-        train_eval_dataset,
-        batch_size=2 * config["batch_size"],
-        num_workers=config["num_workers"],
-        shuffle=False,
-        collate_fn=collate_fn,
-    )
+    return data_loader
 
-    test_loader = idist.auto_dataloader(
-        test_dataset,
-        batch_size=2 * config["batch_size"],
-        num_workers=config["num_workers"],
-        shuffle=False,
-        collate_fn=collate_fn,
-    )
 
+def get_dataflow(config):
+    train_loader = get_dataloader("train", config)
+    val_loader = get_dataloader("eval", config)
+
+    if 10 * len(val_loader.dataset) < len(train_loader.dataset):
+        train_eval_size = len(val_loader)
+    else:
+        train_eval_size = None
+
+    train_eval_loader = get_dataloader("train_eval", config, train_eval_size=train_eval_size)
     num_classes = len(Dataset.classes)
-
-    return train_loader, train_eval_loader, test_loader, num_classes
+    return train_loader, train_eval_loader, val_loader, num_classes

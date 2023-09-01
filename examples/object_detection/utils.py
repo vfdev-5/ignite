@@ -21,7 +21,8 @@ class FBResearchLogger:
     def attach(self, engine: Engine, name: str, every: int = 1, optimizer=None):
         engine.add_event_handler(Events.EPOCH_STARTED, self.log_epoch_started, engine, name)
         engine.add_event_handler(Events.ITERATION_COMPLETED(every=every), self.log_every, engine, optimizer=optimizer)
-        engine.add_event_handler(Events.EPOCH_COMPLETED, self.log_epoch_completed, engine)
+        engine.add_event_handler(Events.EPOCH_COMPLETED, self.log_epoch_completed, engine, name)
+        engine.add_event_handler(Events.COMPLETED, self.log_completed, engine, name)
 
         self.iter_timer = Timer(average=True)
         self.iter_timer.attach(
@@ -86,16 +87,28 @@ class FBResearchLogger:
         msg = f"{name}: start epoch [{engine.state.epoch}/{engine.state.max_epochs}]"
         self.logger.info(msg)
 
-    def log_epoch_completed(self, engine):
+    def log_epoch_completed(self, engine, name):
         epoch_time = engine.state.times[Events.EPOCH_COMPLETED.name]
+        epoch_info = f"Epoch [{engine.state.epoch}/{engine.state.max_epochs}]" if engine.state.max_epochs > 1 else ""
         msg = self.delimiter.join(
             [
-                f"Epoch [{engine.state.epoch}/{engine.state.max_epochs}]",
+                f"{name}: {epoch_info}",
                 f"Total time: {datetime.timedelta(seconds=int(epoch_time))}",
                 f"({epoch_time / engine.state.epoch_length:.4f} s / it)",
             ]
         )
         self.logger.info(msg)
+
+    def log_completed(self, engine, name):
+        if engine.state.max_epochs > 1:
+            total_time = engine.state.times[Events.COMPLETED.name]
+            msg = self.delimiter.join(
+                [
+                    f"{name}: run completed",
+                    f"Total time: {datetime.timedelta(seconds=int(total_time))}",
+                ]
+            )
+            self.logger.info(msg)
 
 
 def save_config(config, path):
