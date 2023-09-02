@@ -15,7 +15,13 @@ import ignite
 import ignite.distributed as idist
 from ignite.contrib.engines import common
 from ignite.engine import Engine, Events
-from ignite.handlers import Checkpoint, create_lr_scheduler_with_warmup, DiskSaver, global_step_from_engine
+from ignite.handlers import (
+    Checkpoint,
+    create_lr_scheduler_with_warmup,
+    DiskSaver,
+    global_step_from_engine,
+    PiecewiseLinear,
+)
 from ignite.utils import manual_seed, setup_logger
 
 
@@ -84,6 +90,10 @@ def training(local_rank, config):
         log_metrics(logger, epoch, state.times["COMPLETED"], "Test", state.metrics)
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED(every=config["validate_every"]) | Events.COMPLETED, run_validation)
+
+    FBResearchLogger(logger, show_output=True).attach(
+        trainer, name="Train", every=config["log_every_iters"], optimizer=optimizer
+    )
 
     if config["start_by_validation"]:
         trainer.add_event_handler(Events.STARTED, run_validation)
@@ -163,19 +173,32 @@ def initialize(config):
             weight_decay=config["weight_decay"],
         )
     else:
-        raise RuntimeError(f"Invalid optimizer {opt_name}. Only SGD and AdamW are supported.")
+        raise RuntimeError(f"Invalid optimizer {opt_name}. Only 'sgd' and 'adamw' are supported.")
     optimizer = idist.auto_optim(optimizer)
 
     num_epochs = config["num_epochs"]
     le = config["epoch_length"]
-    milestones = [int(num_epochs * 0.8 * le), int(num_epochs * 0.9 * le)]
-    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
 
-    lr_scheduler = create_lr_scheduler_with_warmup(
-        lr_scheduler,
-        warmup_start_value=1e-5,
-        warmup_duration=min(1000, le - 1),
-    )
+    lr_scheduler_name = config["lr_scheduler"]
+    if lr_scheduler_name == "multistep":
+        milestones = [int(num_epochs * 0.8 * le), int(num_epochs * 0.9 * le)]
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
+        lr_scheduler = create_lr_scheduler_with_warmup(
+            lr_scheduler,
+            warmup_start_value=1e-5,
+            warmup_duration=min(1000, le - 1),
+        )
+    elif lr_scheduler_name == "linear":
+        milestones_values = [
+            (0, 1e-5),
+            (min(1000, le - 1), config["learning_rate"]),
+            (le * num_epochs, 0.0),
+        ]
+        lr_scheduler = PiecewiseLinear(optimizer, param_name="lr", milestones_values=milestones_values)
+    else:
+        raise RuntimeError(
+            f"Invalid lr scheduler name {lr_scheduler_name}. Only 'multistep' and 'linear' are supported."
+        )
 
     return model, optimizer, lr_scheduler
 
@@ -285,10 +308,6 @@ def create_trainer(model, optimizer, lr_scheduler, train_loader, config, logger)
         with_pbars=False,
     )
 
-    FBResearchLogger(logger, show_output=True).attach(
-        trainer, name="Train", every=config["log_every_iters"], optimizer=optimizer
-    )
-
     resume_from = config["resume_from"]
     if resume_from is not None:
         checkpoint_fp = Path(resume_from)
@@ -347,15 +366,14 @@ def main_train(
     learning_rate: float = 0.0001,
     momentum: float = 0.9,
     weight_decay: float = 1e-4,
+    lr_scheduler: str = "multistep",
     batch_size: int = 4,  # total batch size for training, nb images per gpu is batch_size / nb_gpus
-    eval_batch_size: Optional[
-        int
-    ] = None,  # total batch size for evaluation, nb images per gpu is batch_size / nb_gpus. By default, eval_batch_size = 2 * batch_size
+    eval_batch_size: Optional[int] = None,  # total batch size for evaluation. If None, eval_batch_size = 2 * batch_size
     grad_accumulation_steps: int = 1,  # nb of gradients accumulation steps
     num_workers: int = 12,
     epoch_length: Optional[int] = None,
     trainable_backbone_layers: Optional[int] = None,
-    data_augs: str = "hflip",  # object detection data aug presents: hflip and fixedsize
+    data_augs: str = "hflip",  # object detection data augs: hflip and fixedsize
     validate_every: int = 3,
     start_by_validation: bool = False,
     checkpoint_every: int = 1000,
@@ -389,10 +407,10 @@ def evaluation(local_rank, config):
     now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     folder_name = f"{config['model']}_backend-{idist.backend()}-{idist.get_world_size()}_{now}"
     output_path = Path(output_path) / "eval" / folder_name
-    config["output_path"] = output_path.as_posix()
     if rank == 0 and not output_path.exists():
         output_path.mkdir(parents=True)
 
+    config["output_path"] = output_path.as_posix()
     logger = setup_logger(name="VOCDetection-Evaluation", filepath=output_path / "logs.txt")
     log_basic_info(logger, config)
     logger.info(f"Output path: {config['output_path']}")
@@ -438,12 +456,15 @@ def evaluation(local_rank, config):
 
 def main_evaluate(
     weights_path: str,
+    seed: int = 543,
     data_path: str = "/data",  # path to VOCdevkit, e.g. /data/VOCdevkit -> /data
     output_path: str = "/tmp/output-voc-detection",
     model: str = "retinanet_resnet50_fpn",
     sync_bn: bool = False,
+    data_augs: str = "hflip",  # data transformation for evaluation: hflip or fixedsize
     eval_batch_size: int = 4,  # total batch size, nb images per gpu is batch_size / nb_gpus
     num_workers: int = 4,
+    log_every_iters: int = 50,
     backend: Optional[str] = None,
     nproc_per_node: Optional[int] = None,
     with_amp: bool = True,
