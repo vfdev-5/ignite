@@ -62,10 +62,10 @@ class FBResearchLogger:
         lrs = ""
         if optimizer is not None:
             if len(optimizer.param_groups) == 1:
-                lrs += f"lr: {optimizer.param_groups[0]['lr']:.4f}"
+                lrs += f"lr: {optimizer.param_groups[0]['lr']:.5f}"
             else:
                 for i, g in enumerate(optimizer.param_groups):
-                    lrs += f"lr [g{i}]: {g['lr']:.4f}"
+                    lrs += f"lr [g{i}]: {g['lr']:.5f}"
 
         msg = self.delimiter.join(
             [

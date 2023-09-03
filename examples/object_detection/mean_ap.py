@@ -274,10 +274,11 @@ def test_metric(lrank, data_path, max_batches=None, expected_mean_ap=None):
 
 
 if __name__ == "__main__":
-    # DDP Tests
+    # Metric tests in DDP config
     import sys
     from pathlib import Path
 
+    assert len(sys.argv) == 2, "Usage: python mean_ap.py /data"
     data_path = Path(sys.argv[1])
     assert data_path.exists()
 
