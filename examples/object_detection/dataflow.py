@@ -110,11 +110,12 @@ def get_train_transform(config):
         )
         return train_transform
     elif config["data_augs"] == "fixedsize":
+        fixedsize = 1024
         train_transform = A.Compose(
             [
                 A.RandomScale(scale_limit=(-0.9, 1.0)),
-                A.PadIfNeeded(512, 512, border_mode=0, value=(123.0, 117.0, 104.0)),
-                A.RandomCrop(512, 512),
+                A.PadIfNeeded(fixedsize, fixedsize, border_mode=0, value=(123.0, 117.0, 104.0)),
+                A.RandomCrop(fixedsize, fixedsize),
                 A.HorizontalFlip(p=0.5),
                 A.RandomBrightnessContrast(p=0.5),
                 A.ToFloat(256),
@@ -140,9 +141,10 @@ def get_test_transform(config):
         )
 
     elif config["data_augs"] == "fixedsize":
+        fixedsize = 1024
         test_transform = A.Compose(
             [
-                A.PadIfNeeded(512, 512, border_mode=0, value=(123.0, 117.0, 104.0)),
+                A.PadIfNeeded(fixedsize, fixedsize, border_mode=0, value=(123.0, 117.0, 104.0)),
                 A.ToFloat(256),
                 ToTensorV2(),
             ],

@@ -211,7 +211,7 @@ def log_metrics(logger, epoch, elapsed, tag, metrics):
 
 
 def log_basic_info(logger, config):
-    logger.info(f"Train {config['model']} on CIFAR10")
+    logger.info(f"Train {config['model']} on Pascal-VOC12 Detection")
     logger.info(f"- PyTorch version: {torch.__version__}")
     logger.info(f"- Torchvision version: {torchvision.__version__}")
     logger.info(f"- Ignite version: {ignite.__version__}")
