@@ -67,7 +67,7 @@ class Dataset(VOCDetection):
 
         image, bboxes_classes = result["image"], result["bboxes"]
 
-        bboxes = torch.tensor([a[:4] for a in bboxes_classes])
+        bboxes = torch.tensor([a[:4] for a in bboxes_classes], dtype=torch.float32)
         labels = torch.tensor([self.name_to_label[a[4]] for a in bboxes_classes], dtype=torch.long)
 
         if bboxes.numel() == 0:
@@ -113,7 +113,7 @@ def get_train_transform(config):
         fixedsize = 1024
         train_transform = A.Compose(
             [
-                A.RandomScale(scale_limit=(-0.9, 1.0)),
+                A.RandomScale(scale_limit=(-0.3, 0.7)),
                 A.PadIfNeeded(fixedsize, fixedsize, border_mode=0, value=(123.0, 117.0, 104.0)),
                 A.RandomCrop(fixedsize, fixedsize),
                 A.HorizontalFlip(p=0.5),
@@ -222,7 +222,7 @@ def test_dataloader(dataloader, n=50):
 
         for i, (img, target) in enumerate(zip(imgs, targets)):
             assert img.shape[0] == 3 and img.shape[1] > 50 and img.shape[2] > 50, (j, i, img.shape)
-            assert img.is_floating_point()
+            assert img.dtype == torch.float32, (j, i, img.shape)
 
             for key in ["boxes", "labels", "image_id"]:
                 assert key in target, (j, i, target.keys())
@@ -230,7 +230,7 @@ def test_dataloader(dataloader, n=50):
             boxes = target["boxes"]
             assert len(boxes.shape) == 2 and boxes.shape[1] == 4, (j, i, boxes.shape, boxes.dtype)
             assert boxes.shape[0] >= 0, (j, i, boxes.shape, boxes.dtype)
-            assert boxes.is_floating_point(), (j, i, boxes.shape, boxes.dtype)
+            assert boxes.dtype == torch.float32, (j, i, boxes.shape, boxes.dtype)
 
             labels = target["labels"]
             assert len(labels.shape) == 1 and labels.shape[0] >= 0, (j, i, labels.shape, labels.dtype)
