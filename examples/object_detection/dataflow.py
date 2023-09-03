@@ -160,7 +160,7 @@ def get_dataloader(mode, config, train_eval_size=None):
 
     if mode in ["eval", "train_eval"]:
         transform = get_test_transform(config)
-        image_set = "val"
+        image_set = "val" if mode == "eval" else "train"
     else:
         transform = get_train_transform(config)
         image_set = "train"
