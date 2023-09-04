@@ -418,7 +418,7 @@ def evaluation(local_rank, config):
     if rank == 0:
         save_config(config, output_path / "args.yaml")
 
-    # Setup dataflow, model, optimizer, criterion
+    # Setup validation dataloader and the model
     val_loader = get_dataloader("eval", config)
 
     config["num_classes"] = len(Dataset.classes)
