@@ -86,7 +86,6 @@ class CocoEvaluator:
         self.coco_eval.accumulate()
 
     def summarize(self):
-        print("IoU metric: bbox")
         self.coco_eval.summarize()
 
     def prepare(self, predictions):
@@ -187,7 +186,7 @@ class CocoMetric(Metric):
 
 
 def test_metric(lrank, data_path, max_batches=None, expected_mean_ap=None):
-    from dataflow import Dataset, default_od_collate_fn, get_test_transform
+    from dataflow.voc import VOCDataset, default_od_collate_fn, get_test_transform
     from torch.utils.data import Subset
 
     config = {
@@ -198,7 +197,7 @@ def test_metric(lrank, data_path, max_batches=None, expected_mean_ap=None):
     }
 
     val_transform = get_test_transform(config)
-    test_dataset = Dataset(config["data_path"], image_set="val", download=False, transforms=val_transform)
+    test_dataset = VOCDataset(config["data_path"], image_set="val", download=False, transforms=val_transform)
     test_dataset = Subset(test_dataset, indices=range(max_batches * config["batch_size"]))
     test_loader = idist.auto_dataloader(
         test_dataset,

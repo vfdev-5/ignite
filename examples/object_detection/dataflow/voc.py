@@ -11,7 +11,13 @@ from torchvision.datasets import VOCDetection
 import ignite.distributed as idist
 
 
-class Dataset(VOCDetection):
+class VOCDataset(VOCDetection):
+    """Torchvision's VOCDetection wrapper enabling:
+    - data augmentations with Albumentations
+    - getitem returns a tuple of (image, target)
+    - classes attribute
+    """
+
     classes = (
         "aeroplane",
         "bicycle",
@@ -34,6 +40,7 @@ class Dataset(VOCDetection):
         "sheep",
         "person",
     )
+    # TODO: why k+1 instead of k ???
     name_to_label = {v: k + 1 for k, v in enumerate(classes)}
     label_to_name = {v: k for k, v in name_to_label.items()}
 
@@ -74,7 +81,7 @@ class Dataset(VOCDetection):
             bboxes = bboxes.reshape(0, 4)
 
         target = {}
-        target["boxes"] = bboxes
+        target["boxes"] = bboxes  # XYXY
         target["labels"] = labels
         target["image_id"] = annotations["filename"]
         assert len(bboxes.shape) == 2, (index, bboxes.shape, labels.shape, annotations["filename"])
@@ -165,7 +172,7 @@ def get_dataloader(mode, config, train_eval_size=None):
         transform = get_train_transform(config)
         image_set = "train"
 
-    dataset = Dataset(config["data_path"], image_set=image_set, download=False, transforms=transform)
+    dataset = VOCDataset(config["data_path"], image_set=image_set, download=False, transforms=transform)
 
     if mode == "train_eval" and train_eval_size is not None:
         g = torch.Generator().manual_seed(len(dataset))
@@ -188,81 +195,19 @@ def get_dataloader(mode, config, train_eval_size=None):
         collate_fn=collate_fn,
     )
 
-    return data_loader
+    return data_loader, len(dataset.classes)
 
 
 def get_dataflow(config):
-    train_loader = get_dataloader("train", config)
-    val_loader = get_dataloader("eval", config)
+    train_loader, _ = get_dataloader("train", config)
+    val_loader, _ = get_dataloader("eval", config)
 
     if 10 * len(val_loader.dataset) < len(train_loader.dataset):
         train_eval_size = len(val_loader)
     else:
         train_eval_size = None
 
-    train_eval_loader = get_dataloader("train_eval", config, train_eval_size=train_eval_size)
-    num_classes = len(Dataset.classes)
+    train_eval_loader, _ = get_dataloader("train_eval", config, train_eval_size=train_eval_size)
+    num_classes = len(VOCDataset.classes)
+
     return train_loader, train_eval_loader, val_loader, num_classes
-
-
-def test_dataloader(dataloader, n=50):
-    manual_seed(123)
-
-    dataloader_iter = iter(dataloader)
-
-    for j in range(n):
-        try:
-            imgs, targets = next(dataloader_iter)
-        except Exception as e:
-            print(f"Exception in batch {j}")
-            raise e
-
-        assert isinstance(imgs, list) and len(imgs) == dataloader.batch_size, (j, imgs)
-        assert isinstance(targets, list) and len(targets) == dataloader.batch_size, (j, targets)
-
-        for i, (img, target) in enumerate(zip(imgs, targets)):
-            assert img.shape[0] == 3 and img.shape[1] > 50 and img.shape[2] > 50, (j, i, img.shape)
-            assert img.dtype == torch.float32, (j, i, img.shape)
-
-            for key in ["boxes", "labels", "image_id"]:
-                assert key in target, (j, i, target.keys())
-
-            boxes = target["boxes"]
-            assert len(boxes.shape) == 2 and boxes.shape[1] == 4, (j, i, boxes.shape, boxes.dtype)
-            assert boxes.shape[0] >= 0, (j, i, boxes.shape, boxes.dtype)
-            assert boxes.dtype == torch.float32, (j, i, boxes.shape, boxes.dtype)
-
-            labels = target["labels"]
-            assert len(labels.shape) == 1 and labels.shape[0] >= 0, (j, i, labels.shape, labels.dtype)
-            assert labels.dtype == torch.long, (j, i, labels.shape, labels.dtype)
-
-            image_id = target["image_id"]
-            assert isinstance(image_id, str), (j, i, image_id)
-
-
-if __name__ == "__main__":
-    # Dataflow tests
-    import sys
-    from pathlib import Path
-
-    assert len(sys.argv) == 3, "Usage: python dataflow.py /data hflip"
-    data_path = Path(sys.argv[1])
-    data_augs = sys.argv[2]
-    assert data_path.exists()
-
-    config = {
-        "data_path": data_path,
-        "data_augs": data_augs,
-        "num_workers": 0,
-        "batch_size": 8,
-        "eval_batch_size": 8
-    }
-
-    from ignite.utils import manual_seed
-
-    train_loader, train_eval_loader, val_loader, num_classes = get_dataflow(config)
-    assert num_classes == 20
-
-    test_dataloader(train_loader, n=100)
-    test_dataloader(train_eval_loader, n=100)
-    test_dataloader(val_loader, n=100)

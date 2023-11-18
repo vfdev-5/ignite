@@ -5,3 +5,4 @@ pycocotools
 albumentations
 tensorboard
 clearml
+ultralytics

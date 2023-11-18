@@ -5,9 +5,10 @@ from typing import Any, Optional
 import fire
 import torch
 import torchvision
-
-from dataflow import Dataset, get_dataflow, get_dataloader
+from dataflow import get_dataflow, get_dataloader
 from mean_ap import CocoMetric, convert_to_coco_api
+
+from models import get_model
 from torch.cuda.amp import autocast, GradScaler
 from utils import FBResearchLogger, save_config
 
@@ -22,7 +23,7 @@ from ignite.handlers import (
     global_step_from_engine,
     PiecewiseLinear,
 )
-from ignite.utils import manual_seed, setup_logger
+from ignite.utils import apply_to_type, manual_seed, setup_logger
 
 
 def training(local_rank, config):
@@ -37,7 +38,7 @@ def training(local_rank, config):
     if rank == 0 and not output_path.exists():
         output_path.mkdir(parents=True)
 
-    logger = setup_logger(name="VOCDetection-Training", filepath=output_path / "logs.txt")
+    logger = setup_logger(name=f"{config['dataset'].upper()}-Training", filepath=output_path / "logs.txt")
     log_basic_info(logger, config)
     logger.info(f"Output path: {config['output_path']}")
 
@@ -108,12 +109,22 @@ def training(local_rank, config):
 
         from vis import draw_predictions
 
+        label_to_name = train_loader.dataset.label_to_name
+
         train_evaluator.add_event_handler(
-            Events.ITERATION_COMPLETED(every=len(val_loader) // 3), draw_predictions, tb_logger, "Train Eval"
+            Events.ITERATION_COMPLETED(every=len(train_eval_loader) // 3),
+            draw_predictions,
+            tb_logger,
+            label_to_name,
+            "Train Eval",
         )
 
         evaluator.add_event_handler(
-            Events.ITERATION_COMPLETED(every=len(val_loader) // 3), draw_predictions, tb_logger, "Validation"
+            Events.ITERATION_COMPLETED(every=len(val_loader) // 3),
+            draw_predictions,
+            tb_logger,
+            label_to_name,
+            "Validation",
         )
 
     # Store 2 best models by validation accuracy starting from num_epochs / 2:
@@ -141,16 +152,7 @@ def training(local_rank, config):
 
 
 def initialize(config):
-    kwargs = {"trainable_backbone_layers": config["trainable_backbone_layers"]}
-    if config["data_augs"] in ["fixedsize"]:
-        kwargs["_skip_resize"] = True
-
-    model = torchvision.models.get_model(
-        config["model"],
-        weights_backbone=config["weights_backbone"],
-        num_classes=config["num_classes"] + 1,
-        **kwargs,
-    )
+    model = get_model(config)
     # Adapt model for distributed settings if configured
     model = idist.auto_model(model, sync_bn=config["sync_bn"])
 
@@ -254,15 +256,17 @@ def create_trainer(model, optimizer, lr_scheduler, train_loader, config, logger)
 
     grad_accumulation_steps = config["grad_accumulation_steps"]
 
+    def convert_tensor(x, device, non_blocking=True):
+        def func(y):
+            return y.to(device=device, non_blocking=non_blocking) if isinstance(y, torch.Tensor) else y
+
+        return apply_to_type(x, (int, float, torch.Tensor), func=func)
+
     def train_step(engine, batch):
         images, targets = batch[0], batch[1]
 
-        if isinstance(images, torch.Tensor):
-            images = images.to(device, non_blocking=True)
-        else:
-            images = list(image.to(device) for image in images)
-
-        targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+        images = convert_tensor(images, device=device, non_blocking=True)
+        targets = convert_tensor(targets, device=device, non_blocking=True)
 
         model.train()
 
@@ -356,24 +360,25 @@ def get_save_handler(config):
 
 def main_train(
     seed: int = 543,
-    data_path: str = "/data",  # path to VOCdevkit, e.g. /data/VOCdevkit -> /data
-    output_path: str = "/tmp/output-voc-detection",
-    model: str = "retinanet_resnet50_fpn",
-    weights_backbone: Optional[str] = None,  # backbone weights enum name to load, e.g. ResNet50_Weights.IMAGENET1K_V1
+    dataset: str = "voc",  # dataset name: voc or coco128
+    data_path: str = "/data",  # path to the dataset, e.g. /data/VOCdevkit -> /data
+    output_path: str = f"/tmp/output-detection",
+    model: str = "retinanet_resnet50_fpn",  # <torchvision-model-name> or yolov8<variant>
+    # or yolov8<variant>-coco with MSCoco weights
+    weights_backbone: Optional[str] = "auto",  # backbone weights enum name to load, e.g. ResNet50_Weights.IMAGENET1K_V1
     sync_bn: bool = False,
-    num_epochs: int = 26,
-    optim: str = "adamw",
-    learning_rate: float = 0.0001,
+    num_epochs: int = 15,
+    optim: str = "adamw",  # adamw or sgd
+    learning_rate: float = 0.00012,
     momentum: float = 0.9,
-    weight_decay: float = 1e-4,
-    lr_scheduler: str = "multistep",
+    weight_decay: float = 1e-5,
+    lr_scheduler: str = "linear",  # multistep or linear
     batch_size: int = 4,  # total batch size for training, nb images per gpu is batch_size / nb_gpus
     eval_batch_size: Optional[int] = None,  # total batch size for evaluation. If None, eval_batch_size = 2 * batch_size
     grad_accumulation_steps: int = 1,  # nb of gradients accumulation steps
     num_workers: int = 12,
     epoch_length: Optional[int] = None,
-    trainable_backbone_layers: Optional[int] = None,
-    data_augs: str = "hflip",  # object detection data augs: hflip and fixedsize
+    data_augs: Optional[str] = None,  # object detection data augs: hflip and fixedsize for torchvision models
     validate_every: int = 3,
     start_by_validation: bool = False,
     checkpoint_every: int = 1000,
@@ -411,7 +416,7 @@ def evaluation(local_rank, config):
         output_path.mkdir(parents=True)
 
     config["output_path"] = output_path.as_posix()
-    logger = setup_logger(name="VOCDetection-Evaluation", filepath=output_path / "logs.txt")
+    logger = setup_logger(name=f"{config['dataset'].upper()}-Evaluation", filepath=output_path / "logs.txt")
     log_basic_info(logger, config)
     logger.info(f"Output path: {config['output_path']}")
 
@@ -419,18 +424,10 @@ def evaluation(local_rank, config):
         save_config(config, output_path / "args.yaml")
 
     # Setup validation dataloader and the model
-    val_loader = get_dataloader("eval", config)
+    val_loader, num_classes = get_dataloader("eval", config)
 
-    config["num_classes"] = len(Dataset.classes)
-    kwargs = {}
-    if config["data_augs"] in ["fixedsize"]:
-        kwargs["_skip_resize"] = True
-
-    model = torchvision.models.get_model(
-        config["model"],
-        num_classes=config["num_classes"] + 1,
-        **kwargs,
-    )
+    config["num_classes"] = num_classes
+    model = get_model(config)
     # Adapt model for distributed settings if configured
     model = idist.auto_model(model, sync_bn=config["sync_bn"])
 
@@ -457,6 +454,7 @@ def evaluation(local_rank, config):
 def main_evaluate(
     weights_path: str,
     seed: int = 543,
+    dataset: str = "voc",  # dataset name: voc or coco128
     data_path: str = "/data",  # path to VOCdevkit, e.g. /data/VOCdevkit -> /data
     output_path: str = "/tmp/output-voc-detection",
     model: str = "retinanet_resnet50_fpn",
@@ -483,11 +481,15 @@ def main_evaluate(
         parallel.run(evaluation, config)
 
 
-def download_dataset(path):
-    from dataflow import Dataset
+def download_voc_dataset(path):
+    from dataflow.voc import Dataset
 
     _ = Dataset(path, image_set="train", download=True, transforms=None)
     _ = Dataset(path, image_set="val", download=True, transforms=None)
+
+
+def download_coco128_dataset(path):
+    pass
 
 
 if __name__ == "__main__":
@@ -495,6 +497,7 @@ if __name__ == "__main__":
         {
             "train": main_train,
             "eval": main_evaluate,
-            "download": download_dataset,
+            "download_voc": download_voc_dataset,
+            "download_coco128": download_coco128_dataset,
         }
     )
