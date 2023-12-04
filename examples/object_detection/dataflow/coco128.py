@@ -103,7 +103,7 @@ class COCO128Dataset(Dataset):
     classes = list(label_to_name.values())
     name_to_label = {v: k for k, v in enumerate(classes)}
 
-    def __init__(self, data_path, mode, buffer_size=64, download=False, return_yolo_dict=False):
+    def __init__(self, data_path, mode, buffer_size=8, return_yolo_dict=False):
         if not has_ultralytics:
             raise RuntimeError("To use Yolo models, please install ultralytics:\n\tpip install ultralytics")
 
