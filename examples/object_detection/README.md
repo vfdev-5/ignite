@@ -14,11 +14,11 @@ In this example, we show how to use _Ignite_ to train an object detection model
 - [albumentations](https://github.com/albumentations-team/albumentations): `pip install albumentations`
 - [pycocotools](https://cocodataset.org/): `pip install pycocotools`
 - [python-fire](https://github.com/google/python-fire): `pip install fire`
-- (Optional)[tensorboard](https://www.tensorflow.org/tensorboard): `pip install tensorboard`
-- (Optional)[clearml](https://clear.ml/): `pip install clearml`
-- (Optional)[ultralytics/yolov8](https://docs.ultralytics.com/): `pip install ultralytics`
+- (Optional) [tensorboard](https://www.tensorflow.org/tensorboard): `pip install tensorboard`
+- (Optional) [clearml](https://clear.ml/): `pip install clearml`
+- (Optional) [ultralytics/yolov8](https://docs.ultralytics.com/): `pip install ultralytics`
 
-Alternatively, install the all requirements using `pip install -r requirements.txt`.
+Alternatively, install all requirements using `pip install -r requirements.txt`.
 
 ## Usage:
 
@@ -27,7 +27,7 @@ Alternatively, install the all requirements using `pip install -r requirements.t
 ```bash
 python main.py download_voc --path=/path/to/dataset/folder
 # for example
-# python main.py download --path=/data
+# python main.py download_voc --path=/data/
 ```
 
 ### Download Coco128 dataset
@@ -35,7 +35,7 @@ python main.py download_voc --path=/path/to/dataset/folder
 ```bash
 python main.py download_coco128 --path=/path/to/dataset/folder
 # for example
-# python main.py download --path=/data/coco128
+# python main.py download_coco128 --path=/data/
 ```
 
 ### Single GPU training

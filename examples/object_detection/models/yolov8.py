@@ -24,6 +24,7 @@ class YoloDetectionModelWrapper(nn.Module):
         self.model = yolo_detection_model
 
     def forward(self, batch, _=None):
+        print(type(batch), len(batch))
         if self.training:
             # loss is a sum 3 losses: box, cls, dfl
             loss, _ = self.model(batch)
@@ -68,7 +69,12 @@ def get_ultralytics_yolo_model(model_name, config):
         print(f"Use MSCoco weights for {model_name} model")
         chkpt, _ = torch_safe_load(f"{model_name}.pt")
         coco_model = chkpt["model"]
-        model.load_state_dict(coco_model.state_dict())
+        coco_model_state_dict = coco_model.state_dict()
+
+        if coco_model_state_dict["model.22.cv3.2.2.weight"].shape[0] != num_classes:
+            coco_model_state_dict = {k: v for k, v in coco_model_state_dict.items() if "model.22.cv3" not in k}
+
+        model.load_state_dict(coco_model_state_dict, strict=False)
 
     # This is needed in order to v8DetectionLoss work
     overrides = {

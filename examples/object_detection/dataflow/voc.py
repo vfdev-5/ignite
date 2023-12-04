@@ -103,8 +103,6 @@ def fixedsize_collate_fn(batch):
 
 
 def get_train_transform(config):
-    assert config["data_augs"] in ("hflip", "fixedsize")
-
     bbox_params = A.BboxParams(format="pascal_voc")
     if config["data_augs"] == "hflip":
         train_transform = A.Compose(
@@ -164,6 +162,9 @@ def get_test_transform(config):
 
 def get_dataloader(mode, config, train_eval_size=None):
     assert mode in ["train", "train_eval", "eval"]
+
+    if config["data_augs"] is None:
+        config["data_augs"] = "hflip"
 
     if mode in ["eval", "train_eval"]:
         transform = get_test_transform(config)

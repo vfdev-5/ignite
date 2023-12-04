@@ -1,7 +1,8 @@
-# python models/test_model.py retinanet_resnet50_fpn voc /data/ --data_augs=hflip
-# python models/test_model.py retinanet_resnet50_fpn coco128 /data/coco128 --data_augs=hflip
+# python models/test_model.py retinanet_resnet50_fpn voc /data/
+# python models/test_model.py retinanet_resnet50_fpn coco128 /data/coco128
 # python models/test_model.py yolov8n coco128 /data/coco128
 # python models/test_model.py yolov8n-coco coco128 /data/coco128
+# python models/test_model.py yolov8n-coco voc /data/
 
 import sys
 from pathlib import Path
@@ -48,13 +49,10 @@ def test_model(model, dataloader, n=3, mode="train"):
             output = model(images)
             assert isinstance(output, list) and len(output) == len(images)
             for pred in output:
-                assert isinstance(pred, dict):
+                assert isinstance(pred, dict)
                 assert "boxes" in pred and isinstance(pred["boxes"], torch.Tensor)
                 assert "scores" in pred and isinstance(pred["scores"], torch.Tensor)
                 assert "labels" in pred and isinstance(pred["labels"], torch.Tensor)
-                # else:
-                #     assert isinstance(pred, torch.Tensor), type(pred)
-                #     assert pred.ndim == 2 and pred.shape[1] == 6
 
 
 def main(

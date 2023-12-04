@@ -489,7 +489,10 @@ def download_voc_dataset(path):
 
 
 def download_coco128_dataset(path):
-    pass
+    from torchvision.datasets.utils import download_and_extract_archive
+
+    url = "https://ultralytics.com/assets/coco128.zip"
+    download_and_extract_archive(url, path, remove_finished=True)
 
 
 if __name__ == "__main__":
