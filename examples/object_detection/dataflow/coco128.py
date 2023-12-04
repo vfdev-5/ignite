@@ -1,5 +1,3 @@
-import shutil
-from pathlib import Path
 
 import torch
 from torch.utils.data import Dataset, Subset
@@ -8,7 +6,6 @@ import ignite.distributed as idist
 
 try:
     from ultralytics.data import YOLODataset
-    from ultralytics.data.utils import check_det_dataset
 
     has_ultralytics = True
 except ModuleNotFoundError:
