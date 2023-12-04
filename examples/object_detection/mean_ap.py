@@ -186,7 +186,7 @@ class CocoMetric(Metric):
 
 
 def test_metric(lrank, data_path, max_batches=None, expected_mean_ap=None):
-    from dataflow.voc import VOCDataset, default_od_collate_fn, get_test_transform
+    from dataflow.voc import default_od_collate_fn, get_test_transform, VOCDataset
     from torch.utils.data import Subset
 
     config = {

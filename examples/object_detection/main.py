@@ -482,17 +482,17 @@ def main_evaluate(
 
 
 def download_voc_dataset(path):
-    from dataflow.voc import Dataset
+    from dataflow.voc import VOCDataset
 
-    _ = Dataset(path, image_set="train", download=True, transforms=None)
-    _ = Dataset(path, image_set="val", download=True, transforms=None)
+    _ = VOCDataset(path, image_set="train", download=True, transforms=None)
+    _ = VOCDataset(path, image_set="val", download=True, transforms=None)
 
 
 def download_coco128_dataset(path):
     from torchvision.datasets.utils import download_and_extract_archive
-
     url = "https://ultralytics.com/assets/coco128.zip"
     download_and_extract_archive(url, path, remove_finished=True)
+
 
 
 if __name__ == "__main__":
