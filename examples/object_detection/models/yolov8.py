@@ -64,9 +64,16 @@ def get_ultralytics_yolo_model(model_name, config):
 
     num_classes = config["num_classes"]
     conf = config.get("confidence", 0.001)
+    if config["use_pt_weights"]:
+        from ultralytics import YOLO
 
-    cfg = f"{model_name}.yaml"
-    model = DetectionModel(cfg=cfg, nc=num_classes)
+        cfg = f"{model_name}.pt"
+        model = YOLO(cfg).model
+        yaml_file = model.yaml_file
+    else:
+        cfg = f"{model_name}.yaml"
+        model = DetectionModel(cfg=cfg, nc=num_classes)
+        yaml_file = model.yaml["yaml_file"]
 
     if use_coco_weights:
         print(f"Use MSCoco weights for {model_name} model")
@@ -81,7 +88,7 @@ def get_ultralytics_yolo_model(model_name, config):
 
     # This is needed in order to v8DetectionLoss work
     overrides = {
-        "model": model.yaml["yaml_file"],
+        "model": yaml_file,
         "task": "detect",
         "conf": conf,
     }
