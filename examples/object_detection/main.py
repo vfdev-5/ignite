@@ -67,8 +67,8 @@ def training(local_rank, config):
     config["num_classes"] = num_classes
     if config["epoch_length"] is None:
         config["epoch_length"] = len(train_loader)
-    model, optimizer, lr_scheduler = initialize(config)
 
+    model, optimizer, lr_scheduler = initialize(config)
     trainer = create_trainer(model, optimizer, lr_scheduler, train_loader, config, logger)
 
     # Let's now setup evaluator engine to perform model's validation and compute metrics
@@ -179,7 +179,7 @@ def initialize(config):
     optimizer = idist.auto_optim(optimizer)
 
     num_epochs = config["num_epochs"]
-    le = config["epoch_length"]
+    le = config["epoch_length"] or 1000
 
     lr_scheduler_name = config["lr_scheduler"]
     if lr_scheduler_name == "multistep":
@@ -362,7 +362,7 @@ def main_train(
     seed: int = 543,
     dataset: str = "voc",  # dataset name: voc or coco128
     data_path: str = "/data",  # path to the dataset, e.g. /data/VOCdevkit -> /data
-    output_path: str = f"/tmp/output-detection",
+    output_path: str = "/tmp/output-detection",
     model: str = "retinanet_resnet50_fpn",  # <torchvision-model-name> or yolov8<variant>
     # or yolov8<variant>-coco with MSCoco weights
     weights_backbone: Optional[str] = "auto",  # backbone weights enum name to load, e.g. ResNet50_Weights.IMAGENET1K_V1
@@ -389,6 +389,7 @@ def main_train(
     with_clearml: bool = False,
     with_amp: bool = True,
     with_torch_compile: bool = False,
+    use_pt_weights: bool = False,
     **spawn_kwargs: Any,
 ):
     # catch all local parameters
