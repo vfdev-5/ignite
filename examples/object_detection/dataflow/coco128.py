@@ -1,3 +1,4 @@
+
 import torch
 from torch.utils.data import Dataset, Subset
 
@@ -102,7 +103,7 @@ class COCO128Dataset(Dataset):
     classes = list(label_to_name.values())
     name_to_label = {v: k for k, v in enumerate(classes)}
 
-    def __init__(self, data_path, mode, buffer_size=None, return_yolo_dict=False):
+    def __init__(self, data_path, mode, buffer_size=8, return_yolo_dict=False):
         if not has_ultralytics:
             raise RuntimeError("To use Yolo models, please install ultralytics:\n\tpip install ultralytics")
 
@@ -119,7 +120,6 @@ class COCO128Dataset(Dataset):
         }
 
         kwargs = dict(
-            img_path=data_path,
             imgsz=640,
             batch_size=buffer_size,
             prefix="",
@@ -130,7 +130,7 @@ class COCO128Dataset(Dataset):
         elif mode == "val":
             kwargs.update(dict(augment=False, pad=0.5, fraction=1.0))
 
-        self.dataset = YOLODataset(**kwargs)
+        self.dataset = YOLODataset(data_path, **kwargs)
 
     @staticmethod
     def collate_fn(list_datapoints):

@@ -42,11 +42,14 @@ class YoloDetectionModelWrapper(nn.Module):
                 agnostic=self.model.args.single_cls,
                 max_det=self.model.args.max_det,
             )
-            return [{
-                "boxes": pred[..., :4],
-                "scores": pred[..., 4],
-                "labels": pred[..., 5],
-            } for pred in output]
+            return [
+                {
+                    "boxes": pred[..., :4],
+                    "scores": pred[..., 4],
+                    "labels": pred[..., 5],
+                }
+                for pred in output
+            ]
 
 
 def get_ultralytics_yolo_model(model_name, config):
