@@ -39,7 +39,8 @@ jobs:
       - name: Build fake docs
         run: |
           mkdir -p docs/build/html
-          echo "abc" > content.txt
+          echo "abc" > content1.txt
+          echo "abcd" > content2.txt
 
       - name: Deploy docs
         uses: peaceiris/actions-gh-pages@v3
