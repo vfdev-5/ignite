@@ -34,6 +34,8 @@ jobs:
       - name: Build docs
         run: bash .github/workflows/build_docs.sh
 
+      - run: date
+
       - name: Deploy docs
         uses: peaceiris/actions-gh-pages@v3
         with:
